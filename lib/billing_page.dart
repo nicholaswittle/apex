@@ -82,10 +82,14 @@ class _BillingPageState extends State<BillingPage> {
 
       final data = response.data as Map<String, dynamic>;
       final paymentIntentSecret = data['paymentIntent'] as String?;
+      final paymentIntentId = data['paymentIntentId'] as String?;
       final ephemeralKeySecret = data['ephemeralKey'] as String?;
       final customerId = data['customer'] as String?;
 
-      if (paymentIntentSecret == null || ephemeralKeySecret == null || customerId == null) {
+      if (paymentIntentSecret == null ||
+          paymentIntentId == null ||
+          ephemeralKeySecret == null ||
+          customerId == null) {
         throw 'Stripe client secrets are missing from the function response.';
       }
 
@@ -108,7 +112,7 @@ class _BillingPageState extends State<BillingPage> {
         'create-payment-intent',
         body: {
           'action': 'activate_subscription',
-          'paymentIntent': paymentIntentSecret,
+          'paymentIntentId': paymentIntentId,
         },
       );
 
