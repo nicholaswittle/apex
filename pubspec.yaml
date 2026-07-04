@@ -1,0 +1,28 @@
+name: apex
+description: "A mobile scheduling app for Jigsy's Brewpub."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  firebase_core: ^4.11.0
+  firebase_messaging: ^16.4.0
+  flutter:
+    sdk: flutter
+  
+  supabase_flutter: ^2.0.0
+  flutter_stripe: ^10.1.1
+  wisense_core:
+    path: ../../../packages/wisense_core
+  wisense_ui:
+    path: ../../../packages/wisense_ui
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
