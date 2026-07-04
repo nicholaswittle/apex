@@ -5,6 +5,7 @@ import 'calendar_page.dart';
 import 'auth_page.dart';
 import 'core/app_config.dart';
 import 'core/firebase_bootstrap.dart';
+import 'core/profile_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,33 +40,43 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String email = '';
-    String name = 'Team Member';
-    String role = 'Staff';
-
-    if (initialSession != null) {
-      email = initialSession!.user.email ?? '';
-      final meta = initialSession!.user.userMetadata;
-      if (meta != null) {
-        name = meta['userName'] ?? meta['name'] ?? meta['display_name'] ?? 'Team Member';
-        role = meta['userRole'] ?? meta['role'] ?? 'Staff';
-      }
-    }
-
     return MaterialApp(
       title: 'Apex',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF9F6F0), // Matches your light card background style
+        scaffoldBackgroundColor: const Color(0xFFF9F6F0),
       ),
       home: initialSession != null
-          ? CalendarPage(
-              userEmail: email,
-              userName: name,
-              userRole: role,
-            )
+          ? _AuthenticatedHome(session: initialSession!)
           : const AuthPage(),
+    );
+  }
+}
+
+class _AuthenticatedHome extends StatelessWidget {
+  const _AuthenticatedHome({required this.session});
+
+  final Session session;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({String name, String role})>(
+      future: ProfileSession.loadForUserId(session.user.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final profile = snapshot.data ?? (name: 'Team Member', role: 'Staff');
+        return CalendarPage(
+          userEmail: session.user.email ?? '',
+          userName: profile.name,
+          userRole: profile.role,
+        );
+      },
     );
   }
 }

@@ -51,6 +51,10 @@ Release builds:
 
 Pass via `--dart-define` or `scripts/run_dev.sh` / `scripts/build_release.sh`.
 
+## Billing backend
+
+Owner subscription checkout uses the Supabase Edge Function `create-payment-intent`. See **[docs/BILLING_DEPLOY.md](docs/BILLING_DEPLOY.md)** for deploy steps and required secrets.
+
 ## Firebase push
 
 1. Add `ios/Runner/GoogleService-Info.plist` and `android/app/google-services.json` (see `.example` files)
