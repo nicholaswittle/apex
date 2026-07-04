@@ -61,7 +61,7 @@ class _AuthenticatedHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({String name, String role})>(
+    return FutureBuilder<({String name, String role, String organizationId})>(
       future: ProfileSession.loadForUserId(session.user.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
@@ -70,7 +70,8 @@ class _AuthenticatedHome extends StatelessWidget {
           );
         }
 
-        final profile = snapshot.data ?? (name: 'Team Member', role: 'Staff');
+        final profile = snapshot.data ??
+            (name: 'Team Member', role: 'Staff', organizationId: defaultOrganizationId);
         return CalendarPage(
           userEmail: session.user.email ?? '',
           userName: profile.name,

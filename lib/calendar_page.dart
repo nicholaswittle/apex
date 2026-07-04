@@ -8,6 +8,7 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'billing_page.dart';
+import 'core/profile_session.dart';
 
 
 class CalendarPage extends StatefulWidget {
@@ -93,7 +94,25 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Future<void> _loadStaffNames() async {
     try {
-      final data = await _supabase.from('profiles').select('name, role, hourly_rate').order('name');
+      // Scoped to this venue only — unscoped, this leaks every venue's staff
+      // roster (names, roles, pay rates) to every other venue's users.
+      final myId = _supabase.auth.currentUser?.id;
+      var organizationId = defaultOrganizationId;
+      if (myId != null) {
+        final mine = await _supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', myId)
+            .maybeSingle();
+        organizationId =
+            mine?['organization_id'] as String? ?? defaultOrganizationId;
+      }
+
+      final data = await _supabase
+          .from('profiles')
+          .select('name, role, hourly_rate')
+          .eq('organization_id', organizationId)
+          .order('name');
       if (!mounted) return;
       final rows = (data as List).cast<Map<String, dynamic>>();
       final names = rows.map<String>((r) => r['name'] as String).toList();

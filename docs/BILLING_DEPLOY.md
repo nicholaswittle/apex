@@ -16,6 +16,7 @@ The Flutter app calls `create-payment-intent` for Stripe Payment Sheet checkout 
 ```bash
 cd projects/apex/apex
 supabase link --project-ref cyokzxwztctjuqqygbam
+supabase db push  # applies supabase/migrations/*.sql, including org/workspace model + subscription_status
 supabase secrets set STRIPE_SECRET_KEY=sk_test_xxx SUPABASE_SERVICE_ROLE_KEY=eyJ...
 supabase functions deploy create-payment-intent
 ```
@@ -28,15 +29,26 @@ supabase functions deploy create-payment-intent
 | `activate_subscription` | Verifies PaymentIntent status is `succeeded`, sets `subscription_status = active` |
 | `cancel_subscription` | Sets `subscription_status = inactive` for the signed-in owner |
 
-## SQL (run once if missing)
+## SQL
 
-```sql
-alter table profiles add column if not exists subscription_status text default 'inactive';
-```
+Now tracked as versioned migrations in `supabase/migrations/` — run via
+`supabase db push`, or paste each file's contents into the SQL editor in
+order if you don't have CLI access:
+
+1. `20260704193129_org_workspace_model.sql` — adds `organizations`,
+   `profiles.organization_id` (backfilled to Jigsy's Brewpub), and
+   `profiles.subscription_status`. See
+   `docs/MULTI_TENANT_MIGRATION_PLAN.md` for what this does and doesn't
+   cover (in particular: no RLS yet — read that before onboarding a
+   second venue).
+2. `20260704193613_paying_venues_metric.sql` — adds the `v_paying_venues`
+   view used for the paying-venues north-star metric
+   (`select count(*) from v_paying_venues;`).
 
 ## Phone checklist
 
-1. Supabase dashboard → Edge Functions → deploy `create-payment-intent`
-2. Set secrets above
-3. Merge Apex security PR and let Vercel redeploy web
-4. Test billing on https://apex-scheduler-theta.vercel.app as an owner account
+1. Supabase dashboard → SQL editor → run the two migration files above, in order (if not already applied)
+2. Supabase dashboard → Edge Functions → deploy `create-payment-intent`
+3. Set secrets above
+4. Merge Apex security PR and let Vercel redeploy web
+5. Test billing on https://apex-scheduler-theta.vercel.app as an owner account

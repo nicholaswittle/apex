@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:apex/theme.dart';
 import 'package:wisense_ui/wisense_ui.dart';
+import 'core/profile_session.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -27,17 +28,23 @@ class _BillingPageState extends State<BillingPage> {
 
   Future<void> _loadBillingData() async {
     try {
-      final staffData = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'Staff');
-
       final userId = _supabase.auth.currentUser?.id;
       final ownerData = await _supabase
           .from('profiles')
-          .select('subscription_status')
+          .select('subscription_status, organization_id')
           .eq('id', userId!)
           .single();
+
+      final organizationId =
+          ownerData['organization_id'] as String? ?? defaultOrganizationId;
+
+      // Scoped to this venue only — unscoped, this would sum staff across
+      // every venue on the platform once a second one signs up.
+      final staffData = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'Staff')
+          .eq('organization_id', organizationId);
 
       if (!mounted) return;
       setState(() {
