@@ -103,15 +103,21 @@ class _BillingPageState extends State<BillingPage> {
       // 3. Present the Payment Sheet
       await Stripe.instance.presentPaymentSheet();
 
-      // 4. Update the owner's subscription status to active in Supabase
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'active'})
-          .eq('id', userId!);
+      // 4. Ask the backend to verify payment and activate subscription.
+      final activation = await _supabase.functions.invoke(
+        'create-payment-intent',
+        body: {
+          'action': 'activate_subscription',
+          'paymentIntent': paymentIntentSecret,
+        },
+      );
 
+      if (activation.status != 200) {
+        throw 'Payment succeeded but subscription activation is pending server verification.';
+      }
+
+      await _loadBillingData();
       if (!mounted) return;
-      setState(() => _subscriptionStatus = 'active');
       _showBanner('Subscription activated successfully!', Colors.green);
     } catch (e) {
       if (!mounted) return;
@@ -128,13 +134,17 @@ class _BillingPageState extends State<BillingPage> {
   Future<void> _cancelSubscription() async {
     setState(() => _isProcessing = true);
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'inactive'})
-          .eq('id', userId!);
+      final response = await _supabase.functions.invoke(
+        'create-payment-intent',
+        body: {'action': 'cancel_subscription'},
+      );
+
+      if (response.status != 200) {
+        throw 'Subscription cancellation must be confirmed by the billing backend.';
+      }
+
+      await _loadBillingData();
       if (!mounted) return;
-      setState(() => _subscriptionStatus = 'inactive');
       _showBanner('Subscription cancelled.', UniversalTheme.alertRed);
     } catch (e) {
       if (!mounted) return;

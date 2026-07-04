@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
 import 'core/push_notification_service.dart';
+import 'core/profile_session.dart';
 import 'calendar_page.dart';
 
 class AuthPage extends StatefulWidget {
@@ -74,8 +75,7 @@ class _AuthPageState extends State<AuthPage> {
       );
 
       if (authResponse.session != null && mounted) {
-        String finalName = authResponse.user!.userMetadata?['name'] ?? 'Team Member';
-        String finalRole = authResponse.user!.userMetadata?['role'] ?? 'Staff';
+        final profile = await ProfileSession.loadForUserId(authResponse.user!.id);
 
         await PushNotificationService.syncTokenForCurrentUser();
 
@@ -85,8 +85,8 @@ class _AuthPageState extends State<AuthPage> {
           MaterialPageRoute(
             builder: (context) => CalendarPage(
               userEmail: email,
-              userName: finalName,
-              userRole: finalRole,
+              userName: profile.name,
+              userRole: profile.role,
             ),
           ),
         );
