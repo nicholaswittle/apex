@@ -1,0 +1,17 @@
+{
+  "outputDirectory": "build/web",
+  "headers": [
+    {
+      "source": "/(index.html|main.dart.js|flutter_bootstrap.js|flutter.js|manifest.json)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

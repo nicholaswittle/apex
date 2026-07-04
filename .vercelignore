@@ -1,0 +1,14 @@
+.android/
+.dart_tool/
+.git/
+.idea/
+build/*
+!build/web/**
+android/
+ios/
+linux/
+macos/
+windows/
+test/
+docs/
+*.iml
