@@ -1,11 +1,11 @@
 # Apex Scheduler
 
-Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, sidework, labor cost, and owner Stripe billing.
+Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, sidework, and labor cost.
 
 | | |
 |--|--|
 | **Bundle ID** | `com.wisense.apex` |
-| **Stack** | Flutter · Supabase · Firebase Cloud Messaging · Stripe |
+| **Stack** | Flutter · Supabase · Firebase Cloud Messaging |
 | **Platforms** | iOS · Android · Web |
 
 ## Monorepo layout
@@ -21,7 +21,7 @@ projects/apex/apex/    ← this app
 
 ```bash
 cd projects/apex/apex
-cp .env.local.example .env.local   # fill in Supabase + Stripe keys
+cp .env.local.example .env.local   # fill in Supabase keys
 flutter pub get
 ./scripts/run_dev.sh
 ```
@@ -45,7 +45,7 @@ Release builds:
 |----------|----------|-------|
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes | Public anon key |
-| `STRIPE_PUBLISHABLE_KEY` | Owner billing | Payment Sheet on billing page |
+| `STRIPE_PUBLISHABLE_KEY` | No | Deferred — billing not enabled for pilot launch |
 
 Pass via `--dart-define` or `scripts/run_dev.sh` / `scripts/build_release.sh`.
 
@@ -75,7 +75,7 @@ flutter analyze && flutter test
 - Sidework checklists with completion tracking
 - Time-off requests with approval workflow
 - Time clock and CSV export (share sheet on mobile, download on web)
-- Owner subscription billing via Stripe + webhook
 - Organization invite codes for staff onboarding
-- Push notifications via Firebase Cloud Messaging
-- In-app notification center
+- Push + in-app notifications for swaps, time off, and schedule updates
+
+> **Billing:** Stripe owner subscriptions are deferred (`AppConfig.billingEnabled = false`). All features are unlocked during the pilot.

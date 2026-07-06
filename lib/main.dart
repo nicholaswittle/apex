@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 import 'auth_page.dart';
 import 'calendar_page.dart';
 import 'core/app_config.dart';
@@ -9,10 +8,6 @@ import 'core/profile_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (AppConfig.hasStripe) {
-    Stripe.publishableKey = AppConfig.stripePublishableKey;
-  }
 
   if (AppConfig.hasSupabase) {
     await Supabase.initialize(

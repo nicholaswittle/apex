@@ -111,7 +111,7 @@ flutter run -d chrome \
   --dart-define=SUPABASE_ANON_KEY=...
 ```
 
-Use a **physical Android device** for the full experience (push, Stripe payment sheet).
+Use a **physical Android device** for the full experience (push notifications).
 
 ---
 
@@ -127,8 +127,7 @@ Use a **physical Android device** for the full experience (push, Stripe payment 
 
 ## Checklist: no-Mac minimum for Jigsy's pilot
 
-- [ ] Supabase secrets configured (`STRIPE_*`, `FIREBASE_SERVICE_ACCOUNT_JSON`)
-- [ ] Stripe webhook registered
+- [ ] Supabase `FIREBASE_SERVICE_ACCOUNT_JSON` secret configured (push)
 - [ ] Firebase Android `google-services.json` in repo (gitignored) or CI secret
 - [ ] Android keystore created + `key.properties` configured
 - [ ] `./scripts/build_release.sh android` succeeds

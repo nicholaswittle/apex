@@ -29,7 +29,7 @@ dart pub global activate flutterfire_cli
 flutterfire configure --project=YOUR_PROJECT_ID
 ```
 
-## Supabase + Stripe (runtime)
+## Supabase (runtime)
 
 Pass at build/run time (see `scripts/run_dev.sh`):
 
@@ -37,7 +37,10 @@ Pass at build/run time (see `scripts/run_dev.sh`):
 |----------|---------|
 | `SUPABASE_URL` | Auth + data |
 | `SUPABASE_ANON_KEY` | Public anon key |
-| `STRIPE_PUBLISHABLE_KEY` | Owner billing Payment Sheet |
+
+## Billing (deferred)
+
+Stripe owner subscriptions are **not required** for the Jigsy's pilot. Set `AppConfig.billingEnabled = true` and configure Stripe when ready to monetize. Edge functions (`create-payment-intent`, `stripe-webhook`) remain in the repo for later.
 
 ## iOS — TestFlight
 
@@ -80,30 +83,27 @@ keytool -genkey -v -keystore android/upload-keystore.jks \
 **Name:** Apex Scheduler  
 **Subtitle:** Staff scheduling for Jigsy's Brewpub  
 **Category:** Business / Productivity  
-**Description:** Shift calendar, availability, swap requests, time clock, and owner billing for small hospitality teams.
+**Description:** Shift calendar, availability, swap requests, time clock, and sidework for small hospitality teams.
 
 ## Supabase Edge Function secrets
 
-Configure in Supabase Dashboard → Project Settings → Edge Functions:
+Required for push notifications:
 
 | Secret | Used by |
 |--------|---------|
-| `STRIPE_SECRET_KEY` | `create-payment-intent`, `stripe-webhook` |
-| `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | `send-push-notification` |
 
-Register the Stripe webhook endpoint:
+Optional (billing deferred):
 
-```
-https://<project-ref>.supabase.co/functions/v1/stripe-webhook
-```
-
-Events: `payment_intent.succeeded`, `invoice.payment_failed`, `customer.subscription.deleted`
+| Secret | Used by |
+|--------|---------|
+| `STRIPE_SECRET_KEY` | `create-payment-intent` |
+| `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` |
 
 ## Privacy
 
 - Collects: email, name, work schedule data, optional push token
-- Third parties: Supabase (auth/database), Firebase (push), Stripe (owner subscription only)
+- Third parties: Supabase (auth/database), Firebase (push)
 - Host privacy policy before submission: see **[docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)**
 
 ## Verify locally

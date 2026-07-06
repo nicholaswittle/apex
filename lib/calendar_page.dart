@@ -8,9 +8,7 @@ import 'widgets/staff_availability_card.dart';
 import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
-import 'billing_page.dart';
 import 'core/notification_service.dart';
-import 'core/profile_service.dart';
 import 'widgets/org_invite_panel.dart';
 import 'widgets/notification_bell.dart';
 
@@ -45,7 +43,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   bool _showTutorial = true;
   int _tutorialStep = 0;
-  bool _subscriptionActive = false;
 
   final TextEditingController _sideWorkController = TextEditingController();
   final TextEditingController _timeOffReasonController = TextEditingController();
@@ -101,13 +98,6 @@ class _CalendarPageState extends State<CalendarPage> {
     _loadTimeEntries();
     _listenToNewShifts();
     _loadTutorialState();
-    _loadSubscriptionStatus();
-  }
-
-  Future<void> _loadSubscriptionStatus() async {
-    if (!_isOwner) return;
-    final active = await ProfileService.isSubscriptionActive();
-    if (mounted) setState(() => _subscriptionActive = active);
   }
 
   Future<void> _loadTutorialState() async {
@@ -561,16 +551,6 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _adminCreateShift() async {
-    if (!_subscriptionActive) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Activate your subscription in Billing before publishing shifts.'),
-          backgroundColor: UniversalTheme.alertRed,
-        ),
-      );
-      return;
-    }
-
     final enteredTitle = _adminShiftTitleController.text.trim();
     final title = enteredTitle.isEmpty ? 'General Support Shift' : enteredTitle;
 
@@ -1189,30 +1169,6 @@ class _CalendarPageState extends State<CalendarPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (!_subscriptionActive)
-          Card(
-            color: const Color(0xFFFFF3E0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: Colors.orange.shade300),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-              title: const Text('Subscription required', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Activate billing to publish shifts and unlock owner tools.'),
-              trailing: TextButton(
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BillingPage()),
-                  );
-                  await _loadSubscriptionStatus();
-                },
-                child: const Text('Go to Billing'),
-              ),
-            ),
-          ),
-        if (!_subscriptionActive) const SizedBox(height: WiSenseSpacing.base),
         const OrgInvitePanel(),
         const SizedBox(height: WiSenseSpacing.base),
         Card(
@@ -1406,12 +1362,9 @@ class _CalendarPageState extends State<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _subscriptionActive ? _adminCreateShift : null,
+                    onPressed: _adminCreateShift,
                     style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.darkSlate, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: Text(
-                      _subscriptionActive ? 'Publish Shifts Live' : 'Subscribe to Publish Shifts',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
+                    child: const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -1422,30 +1375,6 @@ class _CalendarPageState extends State<CalendarPage> {
         CsvTimeCardExporter(
           staffRates: _staffRates,
           disabled: _isSyncing,
-        ),
-        const SizedBox(height: WiSenseSpacing.base),
-        Card(
-          color: UniversalTheme.lightCard,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.brown.shade100),
-          ),
-          child: ListTile(
-            leading: const Icon(Icons.payment, color: UniversalTheme.accent),
-            title: const Text(
-              'Manage Billing',
-              style: TextStyle(fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate),
-            ),
-            subtitle: const Text(
-              'View subscription plan and payment gateway',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            trailing: const Icon(Icons.chevron_right, color: UniversalTheme.darkSlate),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const BillingPage()),
-            ),
-          ),
         ),
       ],
     );
