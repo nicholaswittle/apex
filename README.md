@@ -30,6 +30,8 @@ flutter pub get
 
 See **[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md)** for TestFlight and Play Store steps.
 
+**Don't have a Mac?** See **[docs/LAUNCH_WITHOUT_MAC.md](docs/LAUNCH_WITHOUT_MAC.md)** — Android-first launch path + cloud iOS builds.
+
 Release builds:
 
 ```bash

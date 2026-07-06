@@ -1,0 +1,48 @@
+name: Build iOS (cloud)
+
+# Builds iOS on GitHub's macOS runner — no local Mac required.
+# Signing + TestFlight upload requires Apple Developer secrets (see docs/LAUNCH_WITHOUT_MAC.md).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build iOS (no codesign)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+        run: |
+          DEFINES=()
+          [[ -n "$SUPABASE_URL" ]] && DEFINES+=(--dart-define=SUPABASE_URL="$SUPABASE_URL")
+          [[ -n "$SUPABASE_ANON_KEY" ]] && DEFINES+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
+          [[ -n "$STRIPE_PUBLISHABLE_KEY" ]] && DEFINES+=(--dart-define=STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY")
+          flutter build ios --release --no-codesign "${DEFINES[@]}"
+
+      - name: Upload iOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-build
+          path: build/ios/iphoneos/Runner.app
+          retention-days: 14
+
+      # TODO: Add Fastlane / App Store Connect API upload when Apple secrets are configured:
+      # secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_CONTENT, APPLE_TEAM_ID

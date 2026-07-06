@@ -2,13 +2,14 @@
 
 Bundle ID: **`com.wisense.apex`**
 
-## Before first Mac build
+> **No Mac?** See **[docs/LAUNCH_WITHOUT_MAC.md](LAUNCH_WITHOUT_MAC.md)** — ship Android first, build iOS in GitHub Actions or Codemagic.
 
-- [ ] Apple Developer Program enrolled ($99/yr)
-- [ ] Google Play Console account ($25 one-time)
-- [ ] Flutter stable installed on M1 Mac (`flutter doctor -v`)
-- [ ] Xcode installed, license accepted
-- [ ] CocoaPods: `sudo gem install cocoapods`
+## Before first build
+
+- [ ] Apple Developer Program enrolled ($99/yr) — needed for iOS only
+- [ ] Google Play Console account ($25 one-time) — **no Mac required**
+- [ ] Flutter installed on your PC (Windows/Linux) or use GitHub Actions
+- [ ] Mac + Xcode — **optional** if using cloud CI for iOS (see `LAUNCH_WITHOUT_MAC.md`)
 
 ## Firebase (push notifications)
 
