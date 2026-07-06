@@ -83,11 +83,41 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
+  String _authErrorMessage(Object error) {
+    if (error is AuthException) {
+      if (error.code == 'user_already_exists' ||
+          error.message.toLowerCase().contains('already registered')) {
+        return 'This email is already registered. Use Sign In below, or add your invite code and sign in.';
+      }
+      if (error.code == 'invalid_credentials') {
+        return 'Incorrect email or password.';
+      }
+    }
+
+    final text = error.toString().toLowerCase();
+    if (text.contains('invite code is invalid')) {
+      return 'That invite code is invalid. Ask your manager for a new one.';
+    }
+    if (text.contains('already been used')) {
+      return 'That invite code has already been used.';
+    }
+    if (text.contains('expired')) {
+      return 'That invite code has expired. Ask your manager for a new one.';
+    }
+
+    return 'Authentication failed. Check your credentials and try again.';
+  }
+
+  Future<void> _redeemInviteIfProvided(String inviteCode) async {
+    if (inviteCode.isEmpty || _needsOwnerSetup) return;
+    await ProfileService.redeemInvite(inviteCode);
+  }
+
   Future<void> _handleSubmit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final name = _nameController.text.trim();
-    final inviteCode = _inviteCodeController.text.trim();
+    final inviteCode = _inviteCodeController.text.trim().toUpperCase();
 
     if (email.isEmpty || password.isEmpty || (_isSignUp && name.isEmpty)) {
       _showBanner('Please fill out all visible input options.', UniversalTheme.alertRed);
@@ -101,6 +131,8 @@ class _AuthPageState extends State<AuthPage> {
 
     setState(() => _isLoading = true);
 
+    var treatAsSignIn = !_isSignUp;
+
     try {
       if (_isSignUp) {
         final metadata = <String, dynamic>{
@@ -109,13 +141,25 @@ class _AuthPageState extends State<AuthPage> {
           if (inviteCode.isNotEmpty) 'invite_code': inviteCode,
         };
 
-        await _supabase.auth.signUp(
-          email: email,
-          password: password,
-          data: metadata,
-        );
-
-        _showBanner('Registration successful! Logging you in...', Colors.green);
+        try {
+          await _supabase.auth.signUp(
+            email: email,
+            password: password,
+            data: metadata,
+          );
+          _showBanner('Registration successful! Logging you in...', Colors.green);
+        } on AuthException catch (error) {
+          if (error.code == 'user_already_exists' ||
+              error.message.toLowerCase().contains('already registered')) {
+            treatAsSignIn = true;
+            _showBanner(
+              'Account already exists. Signing you in with your invite code...',
+              UniversalTheme.darkSlate,
+            );
+          } else {
+            rethrow;
+          }
+        }
       }
 
       await _supabase.auth.signInWithPassword(
@@ -123,9 +167,16 @@ class _AuthPageState extends State<AuthPage> {
         password: password,
       );
 
+      if (inviteCode.isNotEmpty && !_needsOwnerSetup) {
+        await _redeemInviteIfProvided(inviteCode);
+      }
+
       await _navigateToCalendar();
     } catch (e) {
-      _showBanner('Authentication failed. Check your credentials and try again.', UniversalTheme.alertRed);
+      if (treatAsSignIn && _isSignUp) {
+        if (mounted) setState(() => _isSignUp = false);
+      }
+      _showBanner(_authErrorMessage(e), UniversalTheme.alertRed);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -200,16 +251,20 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                  ],
+                  if (!_needsOwnerSetup)
                     TextField(
                       controller: _inviteCodeController,
-                      decoration: const InputDecoration(
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: InputDecoration(
                         labelText: 'Organization Invite Code',
-                        hintText: 'Required for staff registration',
-                        border: OutlineInputBorder(),
+                        hintText: _isSignUp
+                            ? 'Required for staff registration'
+                            : 'Optional — use to join your team',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
+                  if (!_needsOwnerSetup) const SizedBox(height: 16),
                   TextField(
                     controller: _emailController,
                     decoration: const InputDecoration(

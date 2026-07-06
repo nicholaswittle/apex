@@ -26,4 +26,10 @@ class ProfileService {
     final result = await _client.rpc('apex_has_owner');
     return result == true;
   }
+
+  static Future<void> redeemInvite(String inviteCode) async {
+    await _client.rpc('apex_redeem_invite', params: {
+      'invite_code': inviteCode.trim().toUpperCase(),
+    });
+  }
 }
