@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
-import 'calendar_page.dart';
+import 'core/profile_session.dart';
+import 'features/dashboard/dashboard_screen.dart';
+import 'features/onboarding/business_setup_screen.dart';
 
+/// Legacy owner signup screen — prefer [AuthPage] for new flows.
 class SetupPage extends StatefulWidget {
   const SetupPage({super.key});
 
@@ -36,35 +39,45 @@ class _SetupPageState extends State<SetupPage> {
       final AuthResponse res = await _supabase.auth.signUp(
         email: email,
         password: password,
+        data: {'name': name, 'role': 'Owner'},
       );
 
       if (res.user != null) {
-        await _supabase.from('profiles').update({'name': name}).eq('email', email);
+        await _supabase.from('profiles').insert({
+          'id': res.user!.id,
+          'email': email,
+          'name': name,
+          'role': 'Owner',
+          'first_time_login': true,
+        });
         _showSnackBar('Account created successfully! Logging in...', Colors.green);
       }
 
-      final userData = await _supabase
-          .from('profiles')
-          .select('name, role')
-          .eq('email', email)
-          .maybeSingle();
-
-      if (userData == null) {
-        throw 'User profile missing from database infrastructure.';
-      }
+      await _supabase.auth.signInWithPassword(email: email, password: password);
+      final profile = await ProfileSession.loadForUserId(
+        _supabase.auth.currentUser!.id,
+      );
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => CalendarPage(
-            userEmail: email,
-            userName: userData['name'] ?? 'Staff Member',
-            userRole: userData['role'] ?? 'Staff',
+      if (!profile.hasBusiness) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BusinessSetupScreen(
+              userEmail: email,
+              userName: profile.name,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardScreen(userEmail: email),
+          ),
+        );
+      }
     } catch (e) {
       _showSnackBar('Authentication Error: ${e.toString()}', UniversalTheme.alertRed);
     } finally {
@@ -93,10 +106,10 @@ class _SetupPageState extends State<SetupPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.coffee, size: 48, color: UniversalTheme.accent),
+                  const Icon(Icons.business, size: 48, color: UniversalTheme.accent),
                   const SizedBox(height: 12),
                   const Text(
-                    'APEX',
+                    'Apex Scheduler',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate, letterSpacing: 1.5),
                   ),
                   const Text(

@@ -9,18 +9,24 @@ import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'billing_page.dart';
 import 'core/profile_session.dart';
+import 'features/settings/role_config_screen.dart';
+import 'features/staff/invite_management_screen.dart';
+import 'features/settings/upgrade_screen.dart';
+import 'widgets/location_selector.dart';
 
 
 class CalendarPage extends StatefulWidget {
   final String userEmail;
   final String userName;
   final String userRole;
+  final String businessId;
 
   const CalendarPage({
     super.key,
     required this.userEmail,
     required this.userName,
     required this.userRole,
+    required this.businessId,
   });
 
   @override
@@ -55,6 +61,8 @@ class _CalendarPageState extends State<CalendarPage> {
   bool _isLoadingAvailability = false;
 
   Map<String, String> _clockedInEntries = {};
+  String? _selectedLocationId;
+  List<String> _configuredRoles = [];
 
   final TextEditingController _adminShiftTitleController = TextEditingController();
   String? _adminSelectedStaff;
@@ -88,30 +96,33 @@ class _CalendarPageState extends State<CalendarPage> {
     _generateDynamicWeekLabels();
     _syncDataCore();
     _loadStaffNames();
+    _loadConfiguredRoles();
     _loadTimeEntries();
     _listenToNewShifts();
   }
 
+  Map<String, dynamic> _tenantFields() => {'business_id': widget.businessId};
+
+  Future<void> _loadConfiguredRoles() async {
+    try {
+      final rows = await _supabase
+          .from('roles')
+          .select('name')
+          .eq('business_id', widget.businessId)
+          .order('sort_order');
+      if (!mounted) return;
+      setState(() {
+        _configuredRoles = (rows as List).map((r) => r['name'] as String).toList();
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadStaffNames() async {
     try {
-      // Scoped to this venue only — unscoped, this leaks every venue's staff
-      // roster (names, roles, pay rates) to every other venue's users.
-      final myId = _supabase.auth.currentUser?.id;
-      var organizationId = defaultOrganizationId;
-      if (myId != null) {
-        final mine = await _supabase
-            .from('profiles')
-            .select('organization_id')
-            .eq('id', myId)
-            .maybeSingle();
-        organizationId =
-            mine?['organization_id'] as String? ?? defaultOrganizationId;
-      }
-
       final data = await _supabase
           .from('profiles')
           .select('name, role, hourly_rate')
-          .eq('organization_id', organizationId)
+          .eq('business_id', widget.businessId)
           .order('name');
       if (!mounted) return;
       final rows = (data as List).cast<Map<String, dynamic>>();
@@ -179,7 +190,13 @@ class _CalendarPageState extends State<CalendarPage> {
     final dateStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     try {
       await _supabase.from('availability').upsert(
-        {'user_id': userId, 'user_name': widget.userName, 'date': dateStr, 'available': newAvail},
+        {
+          'user_id': userId,
+          'user_name': widget.userName,
+          'date': dateStr,
+          'available': newAvail,
+          ..._tenantFields(),
+        },
         onConflict: 'user_id,date',
       );
       setState(() => _myAvailabilityToday = newAvail);
@@ -247,6 +264,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'user_id': userId,
         'user_name': widget.userName,
         'shift_id': shiftId,
+        ..._tenantFields(),
       }).select('id').single();
       setState(() => _clockedInEntries[shiftId] = result['id'] as String);
     } catch (e) {
@@ -331,7 +349,9 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
-  void _handleLogOut() {
+  void _handleLogOut() async {
+    await _supabase.auth.signOut();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const AuthPage()),
@@ -346,6 +366,7 @@ class _CalendarPageState extends State<CalendarPage> {
       'day_num': _selectedDate.day,
       'task': taskText,
       'assigned_to': _selectedAssignee,
+      ..._tenantFields(),
     });
 
     _sideWorkController.clear();
@@ -376,6 +397,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'original_staff': originalStaff,
         'day_num': _selectedDate.day,
         'status': 'Available',
+        ..._tenantFields(),
       });
 
       if (!mounted) return;
@@ -444,6 +466,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'start_date': startStr,
         'end_date': endStr,
         'reason': reasonText.isEmpty ? 'Vacation Leave Request' : reasonText,
+        ..._tenantFields(),
       });
 
       _showBanner('Vacation layout requested successfully!', Colors.green);
@@ -511,6 +534,8 @@ class _CalendarPageState extends State<CalendarPage> {
       'notes': formattedHours,
       'is_event': _adminIsEvent,
       'zone': _adminSelectedZone,
+      'location_id': _selectedLocationId,
+      ..._tenantFields(),
     }).toList();
 
     await _supabase.from('shifts').insert(rowsToInsert);
@@ -554,7 +579,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildSideWorkSection() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day).eq('business_id', widget.businessId),
       builder: (context, snapshot) {
         final allTasks = snapshot.data ?? [];
         final displayedTasks = _isOwner ? allTasks : allTasks.where((t) => t['assigned_to'] == widget.userName).toList();
@@ -693,6 +718,12 @@ class _CalendarPageState extends State<CalendarPage> {
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: [
+                LocationSelector(
+                  businessId: widget.businessId,
+                  selectedLocationId: _selectedLocationId,
+                  isOwner: _isOwner,
+                  onLocationChanged: (id) => setState(() => _selectedLocationId = id),
+                ),
                 StaffAvailabilityCard(
                   isLoading: _isLoadingAvailability,
                   availabilityForDay: _availabilityForDay,
@@ -705,9 +736,14 @@ class _CalendarPageState extends State<CalendarPage> {
                 _buildSideWorkSection(),
                 const SizedBox(height: 6),
                 StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day).eq('business_id', widget.businessId),
                   builder: (context, snapshot) {
-                    final currentShifts = snapshot.data ?? [];
+                    var currentShifts = snapshot.data ?? [];
+                    if (_selectedLocationId != null) {
+                      currentShifts = currentShifts
+                          .where((s) => s['location_id'] == null || s['location_id'] == _selectedLocationId)
+                          .toList();
+                    }
                     final dateIsoStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
 
                     final approvedLeaves = _allRequests.where((req) =>
@@ -773,7 +809,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildSwapsTab() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('swaps').stream(primaryKey: ['id']).order('created_at', ascending: false),
+      stream: _supabase.from('swaps').stream(primaryKey: ['id']).eq('business_id', widget.businessId).order('created_at', ascending: false),
       builder: (context, snapshot) {
         final allSwaps = snapshot.data ?? [];
         final availableSwaps = allSwaps.where((swap) => (swap['day_num'] as int) >= _selectedDate.day).toList();
@@ -987,7 +1023,7 @@ class _CalendarPageState extends State<CalendarPage> {
         const Text('REQUEST HISTORY & STATUS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _supabase.from('time_off_requests').stream(primaryKey: ['id']).order('created_at', ascending: false),
+          stream: _supabase.from('time_off_requests').stream(primaryKey: ['id']).eq('business_id', widget.businessId).order('created_at', ascending: false),
           builder: (context, snapshot) {
             final requests = snapshot.data ?? [];
 
@@ -1080,6 +1116,30 @@ class _CalendarPageState extends State<CalendarPage> {
                 const Divider(height: 24),
                 const Text('Shift Title / Role:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 6),
+                if (_configuredRoles.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _configuredRoles.contains(_adminShiftTitleController.text.trim())
+                            ? _adminShiftTitleController.text.trim()
+                            : null,
+                        isExpanded: true,
+                        hint: const Text('Pick a configured role'),
+                        items: _configuredRoles
+                            .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            _adminShiftTitleController.text = val;
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                 TextField(
                   controller: _adminShiftTitleController,
                   decoration: InputDecoration(
@@ -1291,6 +1351,48 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
           ),
         ),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.person_add, color: UniversalTheme.accent),
+            title: const Text('Invite Staff', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Generate invite codes for new team members', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InviteManagementScreen())),
+          ),
+        ),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.badge_outlined, color: UniversalTheme.accent),
+            title: const Text('Configure Roles', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Define shift position names for your business', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleConfigScreen())),
+          ),
+        ),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.workspace_premium, color: UniversalTheme.accent),
+            title: const Text('Upgrade Plan', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Compare Free vs Pro features', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen())),
+          ),
+        ),
       ],
     );
   }
@@ -1309,7 +1411,7 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         backgroundColor: UniversalTheme.darkSlate,
         elevation: 0,
-        title: const Text('APEX', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
+        title: const Text('Apex Scheduler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
         actions: [
           Center(
             child: Padding(

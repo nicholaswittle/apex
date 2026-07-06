@@ -1,5 +1,5 @@
 name: apex
-description: "A mobile scheduling app for Jigsy's Brewpub."
+description: "Apex Scheduler — multi-tenant shift scheduling for any hourly workforce."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -15,9 +15,9 @@ dependencies:
   supabase_flutter: ^2.0.0
   flutter_stripe: ^10.1.1
   wisense_core:
-    path: ../../../packages/wisense_core
+    path: packages/wisense_core
   wisense_ui:
-    path: ../../../packages/wisense_ui
+    path: packages/wisense_ui
 
 dev_dependencies:
   flutter_test:
