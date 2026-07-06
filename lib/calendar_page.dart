@@ -8,7 +8,6 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'billing_page.dart';
-import 'core/profile_session.dart';
 import 'features/settings/role_config_screen.dart';
 import 'features/staff/invite_management_screen.dart';
 import 'features/settings/upgrade_screen.dart';
