@@ -1,6 +1,6 @@
 # Apex Scheduler
 
-Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, sidework, labor cost, and owner Stripe billing.
+Multi-tenant shift scheduling SaaS for restaurants, retail, gyms, clinics, and any hourly workforce — shifts, swaps, time clock, sidework, labor cost, and owner billing.
 
 | | |
 |--|--|
@@ -10,36 +10,37 @@ Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, s
 
 ## Monorepo layout
 
-This app depends on shared WiSense packages (sibling paths):
+This app depends on shared WiSense packages (vendored under `packages/` for standalone builds):
 
 ```
-development/
-  packages/wisense_core/
-  packages/wisense_ui/
-  projects/apex/apex/    ← this app
+packages/wisense_core/
+packages/wisense_ui/
+lib/
+supabase/migrations/
 ```
 
-Clone or sync the full `development` tree on your Mac before building.
-
-## Quick start (Mac)
+## Quick start
 
 ```bash
-cd projects/apex/apex
 cp .env.local.example .env.local   # fill in Supabase + Stripe keys
 flutter pub get
 ./scripts/run_dev.sh
 ```
 
+## Multi-tenant setup
+
+Apply the Supabase migration before onboarding a second business:
+
+```bash
+supabase db push
+# or run supabase/migrations/001_multi_tenant.sql manually
+```
+
+See `docs/MULTI_TENANT_MIGRATION_PLAN.md` for architecture notes.
+
 ## Store launch
 
 See **[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md)** for TestFlight and Play Store steps.
-
-Release builds:
-
-```bash
-./scripts/build_release.sh ios
-./scripts/build_release.sh android
-```
 
 ## Environment variables
 
@@ -49,35 +50,12 @@ Release builds:
 | `SUPABASE_ANON_KEY` | Yes | Public anon key |
 | `STRIPE_PUBLISHABLE_KEY` | Owner billing | Payment Sheet on billing page |
 
-Pass via `--dart-define` or `scripts/run_dev.sh` / `scripts/build_release.sh`.
-
-## Billing backend
-
-Owner subscription checkout uses the Supabase Edge Function `create-payment-intent`. See **[docs/BILLING_DEPLOY.md](docs/BILLING_DEPLOY.md)** for deploy steps and required secrets.
-
-## Firebase push
-
-1. Add `ios/Runner/GoogleService-Info.plist` and `android/app/google-services.json` (see `.example` files)
-2. `FirebaseBootstrap` initializes on startup; push token sync runs after login
-
-## Diagnostics
-
-From workspace root (Windows):
-
-```powershell
-.\scripts\diagnose_apex.ps1
-```
-
-On Mac:
-
-```bash
-flutter analyze && flutter test
-```
-
 ## Features
 
-- Shift calendar and availability
-- Shift swap and time-off requests
-- Time clock and CSV export
-- Owner subscription tiers via Stripe
-- Push notifications (FCM → Supabase `profiles.push_token`)
+- Multi-tenant businesses with RLS isolation
+- Owner onboarding and staff invite codes
+- Configurable shift roles per business
+- Free tier (1 location, 10 staff) and Pro tier
+- Shift calendar, swaps, time off, time clock
+- Owner dashboard with live metrics
+- Stripe billing (Edge Function)

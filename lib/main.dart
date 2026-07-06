@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
-import 'calendar_page.dart';
 import 'auth_page.dart';
 import 'core/app_config.dart';
 import 'core/firebase_bootstrap.dart';
 import 'core/profile_session.dart';
+import 'features/dashboard/dashboard_screen.dart';
+import 'features/onboarding/business_setup_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,7 +42,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Apex',
+      title: 'Apex Scheduler',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
@@ -61,7 +62,7 @@ class _AuthenticatedHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({String name, String role, String organizationId})>(
+    return FutureBuilder<UserProfile>(
       future: ProfileSession.loadForUserId(session.user.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
@@ -71,12 +72,14 @@ class _AuthenticatedHome extends StatelessWidget {
         }
 
         final profile = snapshot.data ??
-            (name: 'Team Member', role: 'Staff', organizationId: defaultOrganizationId);
-        return CalendarPage(
-          userEmail: session.user.email ?? '',
-          userName: profile.name,
-          userRole: profile.role,
-        );
+            UserProfile(userId: session.user.id, name: 'Team Member', role: 'Staff');
+        final email = session.user.email ?? '';
+
+        if (!profile.hasBusiness) {
+          return BusinessSetupScreen(userEmail: email, userName: profile.name);
+        }
+
+        return DashboardScreen(userEmail: email);
       },
     );
   }

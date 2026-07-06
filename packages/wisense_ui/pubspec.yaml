@@ -1,0 +1,11 @@
+name: wisense_ui
+description: Minimal WiSense UI stubs for Apex Scheduler standalone builds.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter

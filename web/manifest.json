@@ -1,11 +1,11 @@
 {
-    "name": "apex",
-    "short_name": "apex",
+    "name": "Apex Scheduler",
+    "short_name": "Apex",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#2D2D2D",
+    "theme_color": "#2D2D2D",
+    "description": "Multi-tenant shift scheduling for hourly workforces.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

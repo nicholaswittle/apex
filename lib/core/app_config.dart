@@ -1,6 +1,6 @@
 /// Compile-time configuration for Apex Scheduler.
 abstract final class AppConfig {
-  static const appName = 'Apex';
+  static const appName = 'Apex Scheduler';
   static const bundleId = 'com.wisense.apex';
 
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
