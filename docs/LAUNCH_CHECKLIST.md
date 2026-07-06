@@ -77,7 +77,7 @@ keytool -genkey -v -keystore android/upload-keystore.jks \
 ## Store listing copy (starter)
 
 **Name:** Apex Scheduler  
-**Subtitle:** Staff scheduling for Jigsy's Brewpub  
+**Subtitle:** Staff scheduling for shift-based teams  
 **Category:** Business / Productivity  
 **Description:** Shift calendar, availability, swap requests, time clock, and owner billing for small hospitality teams.
 

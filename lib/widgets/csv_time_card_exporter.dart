@@ -10,11 +10,13 @@ import '../csv_downloader.dart'
 class CsvTimeCardExporter extends StatefulWidget {
   final Map<String, double> staffRates;
   final bool disabled;
+  final String businessId;
 
   const CsvTimeCardExporter({
     super.key,
     required this.staffRates,
     required this.disabled,
+    required this.businessId,
   });
 
   @override
@@ -31,6 +33,7 @@ class _CsvTimeCardExporterState extends State<CsvTimeCardExporter> {
       final data = await _supabase
           .from('time_entries')
           .select('user_name, clock_in, clock_out')
+          .eq('business_id', widget.businessId)
           .not('clock_out', 'is', null)
           .order('clock_in', ascending: false);
       if (!mounted) return;

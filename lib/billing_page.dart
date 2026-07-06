@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:apex/theme.dart';
 import 'package:wisense_ui/wisense_ui.dart';
+import 'core/services/plan_service.dart';
+import 'core/models/plan_tier.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -13,11 +15,14 @@ class BillingPage extends StatefulWidget {
 
 class _BillingPageState extends State<BillingPage> {
   final _supabase = Supabase.instance.client;
+  final _planService = PlanService();
 
   int _staffCount = 0;
   String _subscriptionStatus = 'inactive';
+  PlanTier _planTier = PlanTier.free;
   bool _isLoading = true;
   bool _isProcessing = false;
+  String? _businessId;
 
   @override
   void initState() {
@@ -27,17 +32,27 @@ class _BillingPageState extends State<BillingPage> {
 
   Future<void> _loadBillingData() async {
     try {
-      final staffData = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'Staff');
-
       final userId = _supabase.auth.currentUser?.id;
       final ownerData = await _supabase
           .from('profiles')
-          .select('subscription_status')
+          .select('subscription_status, business_id')
           .eq('id', userId!)
           .single();
+
+      final businessId = ownerData['business_id'] as String?;
+      _businessId = businessId;
+
+      if (businessId != null) {
+        _planTier = await _planService.refresh(businessId);
+      }
+
+      final staffData = businessId == null
+          ? <dynamic>[]
+          : await _supabase
+              .from('profiles')
+              .select('id')
+              .eq('role', 'Staff')
+              .eq('business_id', businessId);
 
       if (!mounted) return;
       setState(() {
@@ -53,12 +68,14 @@ class _BillingPageState extends State<BillingPage> {
   }
 
   String get _tierName {
+    if (_planTier.isPro) return 'Pro';
     if (_staffCount <= 5) return 'Tier 1';
     if (_staffCount <= 15) return 'Tier 2';
     return 'Tier 3';
   }
 
   int get _monthlyRate {
+    if (_planTier.isPro) return 49;
     if (_staffCount <= 5) return 29;
     if (_staffCount <= 15) return 59;
     return 99;
@@ -67,11 +84,10 @@ class _BillingPageState extends State<BillingPage> {
   Future<void> _simulatePayment() async {
     setState(() => _isProcessing = true);
     try {
-      // 1. Invoke the Supabase Edge Function to create Stripe PaymentIntent
       final response = await _supabase.functions.invoke(
         'create-payment-intent',
         body: {
-          'amount': _monthlyRate * 100, // Cents
+          'amount': _monthlyRate * 100,
           'currency': 'usd',
         },
       );
@@ -82,14 +98,17 @@ class _BillingPageState extends State<BillingPage> {
 
       final data = response.data as Map<String, dynamic>;
       final paymentIntentSecret = data['paymentIntent'] as String?;
+      final paymentIntentId = data['paymentIntentId'] as String?;
       final ephemeralKeySecret = data['ephemeralKey'] as String?;
       final customerId = data['customer'] as String?;
 
-      if (paymentIntentSecret == null || ephemeralKeySecret == null || customerId == null) {
+      if (paymentIntentSecret == null ||
+          paymentIntentId == null ||
+          ephemeralKeySecret == null ||
+          customerId == null) {
         throw 'Stripe client secrets are missing from the function response.';
       }
 
-      // 2. Initialize the Payment Sheet
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: paymentIntentSecret,
@@ -100,18 +119,26 @@ class _BillingPageState extends State<BillingPage> {
         ),
       );
 
-      // 3. Present the Payment Sheet
       await Stripe.instance.presentPaymentSheet();
 
-      // 4. Update the owner's subscription status to active in Supabase
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'active'})
-          .eq('id', userId!);
+      final activation = await _supabase.functions.invoke(
+        'create-payment-intent',
+        body: {
+          'action': 'activate_subscription',
+          'paymentIntentId': paymentIntentId,
+        },
+      );
 
+      if (activation.status != 200) {
+        throw 'Payment succeeded but subscription activation is pending server verification.';
+      }
+
+      if (_businessId != null) {
+        await _planService.upgradeToProManual(_businessId!);
+      }
+
+      await _loadBillingData();
       if (!mounted) return;
-      setState(() => _subscriptionStatus = 'active');
       _showBanner('Subscription activated successfully!', Colors.green);
     } catch (e) {
       if (!mounted) return;
@@ -128,13 +155,17 @@ class _BillingPageState extends State<BillingPage> {
   Future<void> _cancelSubscription() async {
     setState(() => _isProcessing = true);
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'inactive'})
-          .eq('id', userId!);
+      final response = await _supabase.functions.invoke(
+        'create-payment-intent',
+        body: {'action': 'cancel_subscription'},
+      );
+
+      if (response.status != 200) {
+        throw 'Subscription cancellation must be confirmed by the billing backend.';
+      }
+
+      await _loadBillingData();
       if (!mounted) return;
-      setState(() => _subscriptionStatus = 'inactive');
       _showBanner('Subscription cancelled.', UniversalTheme.alertRed);
     } catch (e) {
       if (!mounted) return;
@@ -181,7 +212,7 @@ class _BillingPageState extends State<BillingPage> {
   }
 
   Widget _buildStatusCard() {
-    final isActive = _subscriptionStatus == 'active';
+    final isActive = _subscriptionStatus == 'active' || _planTier.isPro;
     return Card(
       color: UniversalTheme.lightCard,
       shape: RoundedRectangleBorder(
@@ -275,9 +306,9 @@ class _BillingPageState extends State<BillingPage> {
               ),
             ),
             const SizedBox(height: WiSenseSpacing.sm),
-            _buildTierRow('Tier 1', '1–5 staff', '\$29/month', _staffCount <= 5),
-            _buildTierRow('Tier 2', '6–15 staff', '\$59/month', _staffCount > 5 && _staffCount <= 15),
-            _buildTierRow('Tier 3', '16+ staff', '\$99/month', _staffCount > 15),
+            _buildTierRow('Tier 1', '1–5 staff', '\$29/month', _staffCount <= 5 && !_planTier.isPro),
+            _buildTierRow('Tier 2', '6–15 staff', '\$59/month', _staffCount > 5 && _staffCount <= 15 && !_planTier.isPro),
+            _buildTierRow('Tier 3 / Pro', '16+ staff', '\$99/month', _staffCount > 15 || _planTier.isPro),
           ],
         ),
       ),
@@ -354,7 +385,7 @@ class _BillingPageState extends State<BillingPage> {
   }
 
   Widget _buildActionCard() {
-    final isActive = _subscriptionStatus == 'active';
+    final isActive = _subscriptionStatus == 'active' || _planTier.isPro;
     return Card(
       color: UniversalTheme.lightCard,
       shape: RoundedRectangleBorder(

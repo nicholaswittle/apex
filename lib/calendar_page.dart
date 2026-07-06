@@ -8,18 +8,29 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'billing_page.dart';
+import 'core/services/location_service.dart';
+import 'core/services/plan_service.dart';
+import 'core/services/role_service.dart';
+import 'core/models/plan_tier.dart';
+import 'features/dashboard/dashboard_screen.dart';
+import 'features/staff/invite_management_screen.dart';
+import 'features/settings/role_config_screen.dart';
+import 'features/settings/upgrade_screen.dart';
+import 'widgets/upgrade_prompt_widget.dart';
 
 
 class CalendarPage extends StatefulWidget {
   final String userEmail;
   final String userName;
   final String userRole;
+  final String businessId;
 
   const CalendarPage({
     super.key,
     required this.userEmail,
     required this.userName,
     required this.userRole,
+    required this.businessId,
   });
 
   @override
@@ -55,6 +66,15 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Map<String, String> _clockedInEntries = {};
 
+  String? _selectedLocationId;
+  List<Map<String, dynamic>> _locations = [];
+  List<String> _configuredRoles = [];
+  PlanTier _planTier = PlanTier.free;
+
+  final _locationService = LocationService();
+  final _roleService = RoleService();
+  final _planService = PlanService();
+
   final TextEditingController _adminShiftTitleController = TextEditingController();
   String? _adminSelectedStaff;
   bool _adminIsEvent = false;
@@ -86,14 +106,80 @@ class _CalendarPageState extends State<CalendarPage> {
     _adminTargetWeekAnchor = DateTime.now();
     _generateDynamicWeekLabels();
     _syncDataCore();
+    _loadBusinessContext();
     _loadStaffNames();
     _loadTimeEntries();
     _listenToNewShifts();
   }
 
+  Map<String, dynamic> get _tenantFields => {
+        'business_id': widget.businessId,
+        if (_selectedLocationId != null) 'location_id': _selectedLocationId,
+      };
+
+  Future<void> _loadBusinessContext() async {
+    try {
+      final locations = await _locationService.loadLocations(widget.businessId);
+      final roles = await _roleService.loadRoleNames(widget.businessId);
+      final tier = await _planService.refresh(widget.businessId);
+      if (!mounted) return;
+      setState(() {
+        _locations = locations;
+        _selectedLocationId = locations.isNotEmpty ? locations.first['id'] as String : null;
+        _configuredRoles = roles;
+        _planTier = tier;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showBanner('Failed to load business settings: $e', UniversalTheme.alertRed);
+    }
+  }
+
+  Future<void> _addLocation() async {
+    if (!_planService.canAddLocation(
+      currentLocationCount: _locations.length,
+      tier: _planTier,
+    )) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => const UpgradePromptWidget(
+          title: 'Location limit reached',
+          message: 'Free tier includes 1 location. Upgrade to Pro for multiple locations.',
+        ),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Location'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Location name'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Add')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+
+    await _locationService.addLocation(businessId: widget.businessId, name: name);
+    await _loadBusinessContext();
+  }
+
   Future<void> _loadStaffNames() async {
     try {
-      final data = await _supabase.from('profiles').select('name, role, hourly_rate').order('name');
+      final data = await _supabase
+          .from('profiles')
+          .select('name, role, hourly_rate')
+          .eq('business_id', widget.businessId)
+          .order('name');
       if (!mounted) return;
       final rows = (data as List).cast<Map<String, dynamic>>();
       final names = rows.map<String>((r) => r['name'] as String).toList();
@@ -228,6 +314,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'user_id': userId,
         'user_name': widget.userName,
         'shift_id': shiftId,
+        ..._tenantFields,
       }).select('id').single();
       setState(() => _clockedInEntries[shiftId] = result['id'] as String);
     } catch (e) {
@@ -312,7 +399,9 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
-  void _handleLogOut() {
+  void _handleLogOut() async {
+    await _supabase.auth.signOut();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const AuthPage()),
@@ -327,6 +416,7 @@ class _CalendarPageState extends State<CalendarPage> {
       'day_num': _selectedDate.day,
       'task': taskText,
       'assigned_to': _selectedAssignee,
+      ..._tenantFields,
     });
 
     _sideWorkController.clear();
@@ -357,6 +447,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'original_staff': originalStaff,
         'day_num': _selectedDate.day,
         'status': 'Available',
+        ..._tenantFields,
       });
 
       if (!mounted) return;
@@ -425,6 +516,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'start_date': startStr,
         'end_date': endStr,
         'reason': reasonText.isEmpty ? 'Vacation Leave Request' : reasonText,
+        ..._tenantFields,
       });
 
       _showBanner('Vacation layout requested successfully!', Colors.green);
@@ -492,6 +584,7 @@ class _CalendarPageState extends State<CalendarPage> {
       'notes': formattedHours,
       'is_event': _adminIsEvent,
       'zone': _adminSelectedZone,
+      ..._tenantFields,
     }).toList();
 
     await _supabase.from('shifts').insert(rowsToInsert);
@@ -535,7 +628,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildSideWorkSection() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('business_id', widget.businessId).eq('day_num', _selectedDate.day),
       builder: (context, snapshot) {
         final allTasks = snapshot.data ?? [];
         final displayedTasks = _isOwner ? allTasks : allTasks.where((t) => t['assigned_to'] == widget.userName).toList();
@@ -654,6 +747,37 @@ class _CalendarPageState extends State<CalendarPage> {
       onChangeMonth: _changeMonth,
       body: Column(
         children: [
+          if (_locations.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined, size: 18, color: UniversalTheme.darkSlate),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedLocationId,
+                        isExpanded: true,
+                        items: _locations.map((loc) {
+                          return DropdownMenuItem<String>(
+                            value: loc['id'] as String,
+                            child: Text(loc['name'] as String),
+                          );
+                        }).toList(),
+                        onChanged: (id) => setState(() => _selectedLocationId = id),
+                      ),
+                    ),
+                  ),
+                  if (_isOwner)
+                    IconButton(
+                      icon: const Icon(Icons.add_location_alt_outlined, size: 20),
+                      tooltip: 'Add location',
+                      onPressed: _addLocation,
+                    ),
+                ],
+              ),
+            ),
           if (_showAckBanner)
             Container(
               margin: const EdgeInsets.all(12),
@@ -686,7 +810,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 _buildSideWorkSection(),
                 const SizedBox(height: 6),
                 StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('business_id', widget.businessId).eq('day_num', _selectedDate.day),
                   builder: (context, snapshot) {
                     final currentShifts = snapshot.data ?? [];
                     final dateIsoStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
@@ -754,7 +878,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildSwapsTab() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('swaps').stream(primaryKey: ['id']).order('created_at', ascending: false),
+      stream: _supabase.from('swaps').stream(primaryKey: ['id']).eq('business_id', widget.businessId).order('created_at', ascending: false),
       builder: (context, snapshot) {
         final allSwaps = snapshot.data ?? [];
         final availableSwaps = allSwaps.where((swap) => (swap['day_num'] as int) >= _selectedDate.day).toList();
@@ -968,7 +1092,7 @@ class _CalendarPageState extends State<CalendarPage> {
         const Text('REQUEST HISTORY & STATUS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _supabase.from('time_off_requests').stream(primaryKey: ['id']).order('created_at', ascending: false),
+          stream: _supabase.from('time_off_requests').stream(primaryKey: ['id']).eq('business_id', widget.businessId).order('created_at', ascending: false),
           builder: (context, snapshot) {
             final requests = snapshot.data ?? [];
 
@@ -1061,6 +1185,23 @@ class _CalendarPageState extends State<CalendarPage> {
                 const Divider(height: 24),
                 const Text('Shift Title / Role:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 6),
+                if (_configuredRoles.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: null,
+                        isExpanded: true,
+                        hint: const Text('Pick a configured role (optional)'),
+                        items: _configuredRoles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                        onChanged: (val) {
+                          if (val != null) _adminShiftTitleController.text = val;
+                        },
+                      ),
+                    ),
+                  ),
                 TextField(
                   controller: _adminShiftTitleController,
                   decoration: InputDecoration(
@@ -1247,6 +1388,55 @@ class _CalendarPageState extends State<CalendarPage> {
         CsvTimeCardExporter(
           staffRates: _staffRates,
           disabled: _isSyncing,
+          businessId: widget.businessId,
+        ),
+        const SizedBox(height: WiSenseSpacing.base),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.group_add, color: UniversalTheme.accent),
+            title: const Text('Staff Invites', style: TextStyle(fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate)),
+            subtitle: const Text('Generate invite codes for new team members', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right, color: UniversalTheme.darkSlate),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InviteManagementScreen())),
+          ),
+        ),
+        const SizedBox(height: WiSenseSpacing.base),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.badge_outlined, color: UniversalTheme.accent),
+            title: const Text('Role Configuration', style: TextStyle(fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate)),
+            subtitle: const Text('Define position names for your business', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right, color: UniversalTheme.darkSlate),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleConfigScreen())),
+          ),
+        ),
+        const SizedBox(height: WiSenseSpacing.base),
+        Card(
+          color: UniversalTheme.lightCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.brown.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.workspace_premium, color: UniversalTheme.accent),
+            title: const Text('Upgrade Plan', style: TextStyle(fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate)),
+            subtitle: Text(
+              _planTier.isPro ? 'Pro plan active' : 'Free plan — tap to compare plans',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            trailing: const Icon(Icons.chevron_right, color: UniversalTheme.darkSlate),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen())),
+          ),
         ),
         const SizedBox(height: WiSenseSpacing.base),
         Card(
@@ -1279,10 +1469,11 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> tabs = [
+      const DashboardScreen(),
       _buildCalendarTab(),
-      _buildSwapsTab(), 
-      _buildTimeOffTab(), 
-      _buildAdminTab(), 
+      _buildSwapsTab(),
+      _buildTimeOffTab(),
+      _buildAdminTab(),
     ];
 
     return Scaffold(
@@ -1290,7 +1481,7 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         backgroundColor: UniversalTheme.darkSlate,
         elevation: 0,
-        title: const Text('APEX', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
+        title: const Text('Apex Scheduler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
         actions: [
           Center(
             child: Padding(
@@ -1319,11 +1510,12 @@ class _CalendarPageState extends State<CalendarPage> {
         onTap: (index) {
           setState(() {
             _currentIndex = index;
-            if (index != 3 && _isOwner) _showTutorial = false;
+            if (index != 4 && _isOwner) _showTutorial = false;
           });
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Schedule'),
           BottomNavigationBarItem(icon: Icon(Icons.swap_horizontal_circle), label: 'Swaps'),
           BottomNavigationBarItem(icon: Icon(Icons.block), label: 'Time Off'),
           BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings), label: 'Admin'),
@@ -1476,11 +1668,11 @@ class _CalendarPageState extends State<CalendarPage> {
 
     List<String> tutorialTitles = _isOwner 
       ? ["Welcome, ${widget.userName}!", "⚡ Optional Branding", "⏰ Consistent Time Layout", "🗓️ Batch-Publish Week"]
-      : ["Welcome to Apex!", "📋 Check Work & Tasks", "🔀 The Swap Board", "🌴 Request Time Off"];
+      : ["Welcome to Apex Scheduler!", "📋 Check Work & Tasks", "🔀 The Swap Board", "🌴 Request Time Off"];
 
     List<String> tutorialTexts = _isOwner
       ? [
-          "I've tailored this layout completely around your coffee bar template operations. Let's run through the manager features in 10 seconds.",
+          "I've tailored this layout for your team's shift operations. Let's run through the manager features in 10 seconds.",
           "You can now completely leave the 'Shift Title' text field blank. If left empty, the scheduler automatically records a 'General Support Shift' to speed up your routine!",
           "Start and end hours are now completely locked into dropdown wheels. This guarantees perfectly uniform formatting on calendar cards and prevents typos.",
           "Check off multiple target checkboxes at once (like Wed through Sun) to instantaneously stamp identical template operations across the entire week!"
@@ -1736,7 +1928,7 @@ class _CalendarPageState extends State<CalendarPage> {
           children: [
             Icon(Icons.auto_awesome, color: UniversalTheme.accent),
             SizedBox(width: 8),
-            Text('Welcome to Apex', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('Welcome to Apex Scheduler', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
