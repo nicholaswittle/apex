@@ -16,5 +16,4 @@ source "$ROOT/.env.local"
 flutter pub get
 flutter run \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
-  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
-  --dart-define=STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"

@@ -5,6 +5,7 @@ import 'calendar_page.dart';
 import 'core/app_config.dart';
 import 'core/firebase_bootstrap.dart';
 import 'core/profile_service.dart';
+import 'widgets/config_missing_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +54,7 @@ class _AuthGateState extends State<_AuthGate> {
   @override
   void initState() {
     super.initState();
+    if (!AppConfig.hasSupabase) return;
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
       if (mounted) setState(() {});
     });
@@ -61,7 +63,7 @@ class _AuthGateState extends State<_AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (!AppConfig.hasSupabase) {
-      return const AuthPage();
+      return const ConfigMissingScreen();
     }
 
     final session = Supabase.instance.client.auth.currentSession;

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
 import 'core/push_notification_service.dart';
 import 'core/profile_service.dart';
+import 'core/app_config.dart';
 import 'calendar_page.dart';
 import 'setup_page.dart';
 
@@ -22,19 +23,27 @@ class _AuthPageState extends State<AuthPage> {
   bool _isSignUp = false;
   bool _isLoading = false;
   bool _needsOwnerSetup = false;
-  final _supabase = Supabase.instance.client;
+
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   @override
   void initState() {
     super.initState();
-    _checkOwnerSetup();
+    if (AppConfig.hasSupabase) {
+      _checkOwnerSetup();
+    }
   }
 
   Future<void> _checkOwnerSetup() async {
     if (!mounted) return;
-    final hasOwner = await ProfileService.hasOwnerAccount();
-    if (!mounted) return;
-    setState(() => _needsOwnerSetup = !hasOwner);
+    try {
+      final hasOwner = await ProfileService.hasOwnerAccount();
+      if (!mounted) return;
+      setState(() => _needsOwnerSetup = !hasOwner);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _needsOwnerSetup = false);
+    }
   }
 
   @override

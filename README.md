@@ -17,14 +17,19 @@ packages/wisense_ui/
 projects/apex/apex/    ← this app
 ```
 
-## Quick start (Mac)
+## Quick start (Mac / Windows / Linux)
 
 ```bash
 cd projects/apex/apex
 cp .env.local.example .env.local   # fill in Supabase keys
 flutter pub get
-./scripts/run_dev.sh
+./scripts/run_dev.sh               # mobile/desktop
+./scripts/build_web.sh             # web build for Vercel or local preview
 ```
+
+## Test on Vercel (web)
+
+See **[docs/VERCEL.md](docs/VERCEL.md)** — deploy the Flutter web build with `SUPABASE_URL` and `SUPABASE_ANON_KEY` env vars.
 
 ## Store launch
 
