@@ -64,14 +64,13 @@ class _BillingPageState extends State<BillingPage> {
     return 99;
   }
 
-  Future<void> _simulatePayment() async {
+  Future<void> _processPayment() async {
     setState(() => _isProcessing = true);
     try {
-      // 1. Invoke the Supabase Edge Function to create Stripe PaymentIntent
       final response = await _supabase.functions.invoke(
         'create-payment-intent',
         body: {
-          'amount': _monthlyRate * 100, // Cents
+          'amount': _monthlyRate * 100,
           'currency': 'usd',
         },
       );
@@ -89,7 +88,6 @@ class _BillingPageState extends State<BillingPage> {
         throw 'Stripe client secrets are missing from the function response.';
       }
 
-      // 2. Initialize the Payment Sheet
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: paymentIntentSecret,
@@ -100,15 +98,8 @@ class _BillingPageState extends State<BillingPage> {
         ),
       );
 
-      // 3. Present the Payment Sheet
       await Stripe.instance.presentPaymentSheet();
-
-      // 4. Update the owner's subscription status to active in Supabase
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'active'})
-          .eq('id', userId!);
+      await _supabase.rpc('apex_activate_subscription');
 
       if (!mounted) return;
       setState(() => _subscriptionStatus = 'active');
@@ -128,11 +119,7 @@ class _BillingPageState extends State<BillingPage> {
   Future<void> _cancelSubscription() async {
     setState(() => _isProcessing = true);
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      await _supabase
-          .from('profiles')
-          .update({'subscription_status': 'inactive'})
-          .eq('id', userId!);
+      await _supabase.rpc('apex_deactivate_subscription');
       if (!mounted) return;
       setState(() => _subscriptionStatus = 'inactive');
       _showBanner('Subscription cancelled.', UniversalTheme.alertRed);
@@ -388,7 +375,7 @@ class _BillingPageState extends State<BillingPage> {
               ),
               const SizedBox(height: WiSenseSpacing.base),
               ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _simulatePayment,
+                onPressed: _isProcessing ? null : _processPayment,
                 icon: _isProcessing
                     ? const SizedBox(
                         height: 16,
@@ -399,7 +386,7 @@ class _BillingPageState extends State<BillingPage> {
                 label: Text(
                   _isProcessing
                       ? 'Processing...'
-                      : 'Simulate Payment (\$$_monthlyRate/mo)',
+                      : 'Subscribe (\$$_monthlyRate/mo)',
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: UniversalTheme.darkSlate,

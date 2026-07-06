@@ -10,16 +10,12 @@ Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, s
 
 ## Monorepo layout
 
-This app depends on shared WiSense packages (sibling paths):
+This app uses a vendored shared UI package:
 
 ```
-development/
-  packages/wisense_core/
-  packages/wisense_ui/
-  projects/apex/apex/    ← this app
+packages/wisense_ui/
+projects/apex/apex/    ← this app
 ```
-
-Clone or sync the full `development` tree on your Mac before building.
 
 ## Quick start (Mac)
 

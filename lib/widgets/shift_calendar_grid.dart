@@ -25,10 +25,13 @@ class ShiftCalendarGrid extends StatelessWidget {
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
   ];
 
-  Widget _buildDayTile(String dayName, int dayNum) {
-    final bool isSelected = selectedDate.day == dayNum;
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  Widget _buildDayTile(String dayName, DateTime date) {
+    final bool isSelected = _isSameDay(selectedDate, date);
     return GestureDetector(
-      onTap: () => onDateSelected(DateTime(selectedDate.year, selectedDate.month, dayNum)),
+      onTap: () => onDateSelected(date),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
         decoration: BoxDecoration(
@@ -52,7 +55,7 @@ class ShiftCalendarGrid extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              dayNum.toString(),
+              date.day.toString(),
               style: TextStyle(
                 fontSize: 14,
                 color: isSelected ? Colors.white : UniversalTheme.darkSlate,
@@ -110,10 +113,11 @@ class ShiftCalendarGrid extends StatelessWidget {
               itemBuilder: (context, index) {
                 if (index < weekdayOffset) return const SizedBox.shrink();
                 final int dayNum = index - weekdayOffset + 1;
-                final bool isSelected = selectedDate.day == dayNum;
+                final date = DateTime(selectedDate.year, selectedDate.month, dayNum);
+                final bool isSelected = _isSameDay(selectedDate, date);
                 return GestureDetector(
                   onTap: () {
-                    onDateSelected(DateTime(selectedDate.year, selectedDate.month, dayNum));
+                    onDateSelected(date);
                     onToggleMonthView();
                   },
                   child: Container(
@@ -193,7 +197,7 @@ class ShiftCalendarGrid extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: List.generate(
                       7,
-                      (i) => _buildDayTile(_shortNames[i], weekDays[i].day),
+                      (i) => _buildDayTile(_shortNames[i], weekDays[i]),
                     ),
                   ),
                 ),
