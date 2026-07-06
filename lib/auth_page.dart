@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
 import 'core/push_notification_service.dart';
-import 'calendar_page.dart';
+import 'core/profile_session.dart';
+import 'core/services/invite_service.dart';
+import 'features/dashboard/app_shell.dart';
+import 'features/onboarding/business_setup_screen.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -15,21 +18,59 @@ class _AuthPageState extends State<AuthPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  
+  final _inviteCodeController = TextEditingController();
+
   bool _isSignUp = false;
   bool _isLoading = false;
   final _supabase = Supabase.instance.client;
+  final _inviteService = InviteService();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _inviteCodeController.dispose();
     super.dispose();
   }
 
   void _showBanner(String msg, Color bg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: bg));
+  }
+
+  Future<void> _routeAfterAuth(String userId) async {
+    await PushNotificationService.syncTokenForCurrentUser();
+    if (!mounted) return;
+
+    final profile = await ProfileSession.loadForUserId(userId);
+    final inviteCode = _inviteCodeController.text.trim();
+
+    if (profile.needsBusinessSetup) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BusinessSetupScreen(
+            userId: userId,
+            initialInviteCode: inviteCode.isNotEmpty ? inviteCode : null,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (inviteCode.isNotEmpty) {
+      try {
+        await _inviteService.joinBusinessWithCode(userId: userId, code: inviteCode);
+      } catch (e) {
+        _showBanner('Signed in, but invite code failed: $e', UniversalTheme.alertRed);
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const AppShell()),
+    );
   }
 
   Future<void> _handleSubmit() async {
@@ -74,22 +115,7 @@ class _AuthPageState extends State<AuthPage> {
       );
 
       if (authResponse.session != null && mounted) {
-        String finalName = authResponse.user!.userMetadata?['name'] ?? 'Team Member';
-        String finalRole = authResponse.user!.userMetadata?['role'] ?? 'Staff';
-
-        await PushNotificationService.syncTokenForCurrentUser();
-
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CalendarPage(
-              userEmail: email,
-              userName: finalName,
-              userRole: finalRole,
-            ),
-          ),
-        );
+        await _routeAfterAuth(authResponse.user!.id);
       }
     } catch (e) {
       _showBanner('Authentication Error: $e', UniversalTheme.alertRed);
@@ -119,13 +145,13 @@ class _AuthPageState extends State<AuthPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'APEX',
+                    'Apex Scheduler',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: UniversalTheme.darkSlate,
-                      letterSpacing: 1.5,
+                      letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -135,7 +161,7 @@ class _AuthPageState extends State<AuthPage> {
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const Divider(height: 32, thickness: 1.2),
-                  
+
                   if (_isSignUp) ...[
                     TextField(
                       controller: _nameController,
@@ -203,6 +229,29 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+
+                  TextField(
+                    controller: _inviteCodeController,
+                    textCapitalization: TextCapitalization.characters,
+                    style: const TextStyle(color: Color(0xFF2D2D2D), fontSize: 15, fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      labelText: 'Invite Code (optional)',
+                      labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+                      hintText: 'Join an existing business',
+                      hintStyle: const TextStyle(color: Colors.black38),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey.shade400, width: 1.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
 
                   ElevatedButton(
@@ -214,7 +263,7 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                     child: _isLoading
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Sign In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                        : Text(_isSignUp ? 'Create Account' : 'Sign In', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                   const SizedBox(height: 16),
 

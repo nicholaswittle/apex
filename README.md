@@ -1,6 +1,6 @@
 # Apex Scheduler
 
-Mobile staff scheduling for **Jigsy's Brewpub** — shifts, swaps, time clock, sidework, labor cost, and owner Stripe billing.
+Mobile staff scheduling for shift-based businesses — restaurants, retail, gyms, clinics, and any hourly workforce. Multi-tenant SaaS with shifts, swaps, time clock, sidework, labor cost, and freemium billing.
 
 | | |
 |--|--|

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
-import 'calendar_page.dart';
-import 'auth_page.dart';
 import 'core/app_config.dart';
 import 'core/firebase_bootstrap.dart';
+import 'auth_page.dart';
+import 'features/dashboard/app_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,33 +39,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String email = '';
-    String name = 'Team Member';
-    String role = 'Staff';
-
-    if (initialSession != null) {
-      email = initialSession!.user.email ?? '';
-      final meta = initialSession!.user.userMetadata;
-      if (meta != null) {
-        name = meta['userName'] ?? meta['name'] ?? meta['display_name'] ?? 'Team Member';
-        role = meta['userRole'] ?? meta['role'] ?? 'Staff';
-      }
-    }
-
     return MaterialApp(
-      title: 'Apex',
+      title: 'Apex Scheduler',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF9F6F0), // Matches your light card background style
+        scaffoldBackgroundColor: const Color(0xFFF9F6F0),
       ),
-      home: initialSession != null
-          ? CalendarPage(
-              userEmail: email,
-              userName: name,
-              userRole: role,
-            )
-          : const AuthPage(),
+      home: initialSession != null ? const AppShell() : const AuthPage(),
     );
   }
 }

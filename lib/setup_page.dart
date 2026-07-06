@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
-import 'calendar_page.dart';
+import 'features/dashboard/app_shell.dart';
 
 class SetupPage extends StatefulWidget {
   const SetupPage({super.key});
@@ -57,13 +57,7 @@ class _SetupPageState extends State<SetupPage> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => CalendarPage(
-            userEmail: email,
-            userName: userData['name'] ?? 'Staff Member',
-            userRole: userData['role'] ?? 'Staff',
-          ),
-        ),
+        MaterialPageRoute(builder: (context) => const AppShell()),
       );
     } catch (e) {
       _showSnackBar('Authentication Error: ${e.toString()}', UniversalTheme.alertRed);
@@ -93,10 +87,10 @@ class _SetupPageState extends State<SetupPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.coffee, size: 48, color: UniversalTheme.accent),
+                  const Icon(Icons.business, size: 48, color: UniversalTheme.accent),
                   const SizedBox(height: 12),
                   const Text(
-                    'APEX',
+                    'Apex Scheduler',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate, letterSpacing: 1.5),
                   ),
                   const Text(
