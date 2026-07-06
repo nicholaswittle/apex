@@ -81,11 +81,29 @@ keytool -genkey -v -keystore android/upload-keystore.jks \
 **Category:** Business / Productivity  
 **Description:** Shift calendar, availability, swap requests, time clock, and owner billing for small hospitality teams.
 
+## Supabase Edge Function secrets
+
+Configure in Supabase Dashboard → Project Settings → Edge Functions:
+
+| Secret | Used by |
+|--------|---------|
+| `STRIPE_SECRET_KEY` | `create-payment-intent`, `stripe-webhook` |
+| `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | `send-push-notification` |
+
+Register the Stripe webhook endpoint:
+
+```
+https://<project-ref>.supabase.co/functions/v1/stripe-webhook
+```
+
+Events: `payment_intent.succeeded`, `invoice.payment_failed`, `customer.subscription.deleted`
+
 ## Privacy
 
 - Collects: email, name, work schedule data, optional push token
 - Third parties: Supabase (auth/database), Firebase (push), Stripe (owner subscription only)
-- Host a privacy policy URL before submission
+- Host privacy policy before submission: see **[docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)**
 
 ## Verify locally
 

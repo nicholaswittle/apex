@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:apex/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wisense_ui/wisense_ui.dart';
-import '../csv_downloader.dart'
+import '../csv_downloader_stub.dart'
     if (dart.library.html) '../csv_downloader_web.dart';
 
 class CsvTimeCardExporter extends StatefulWidget {
@@ -61,7 +61,7 @@ class _CsvTimeCardExporterState extends State<CsvTimeCardExporter> {
       }
 
       final csv = buf.toString();
-      if (kIsWeb) downloadCsv('time_cards_${DateTime.now().millisecondsSinceEpoch}.csv', csv);
+      downloadCsv('time_cards_${DateTime.now().millisecondsSinceEpoch}.csv', csv);
 
       if (!mounted) return;
       showDialog(

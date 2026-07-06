@@ -9,6 +9,10 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'billing_page.dart';
+import 'core/notification_service.dart';
+import 'core/profile_service.dart';
+import 'widgets/org_invite_panel.dart';
+import 'widgets/notification_bell.dart';
 
 
 class CalendarPage extends StatefulWidget {
@@ -41,6 +45,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   bool _showTutorial = true;
   int _tutorialStep = 0;
+  bool _subscriptionActive = false;
 
   final TextEditingController _sideWorkController = TextEditingController();
   final TextEditingController _timeOffReasonController = TextEditingController();
@@ -96,6 +101,13 @@ class _CalendarPageState extends State<CalendarPage> {
     _loadTimeEntries();
     _listenToNewShifts();
     _loadTutorialState();
+    _loadSubscriptionStatus();
+  }
+
+  Future<void> _loadSubscriptionStatus() async {
+    if (!_isOwner) return;
+    final active = await ProfileService.isSubscriptionActive();
+    if (mounted) setState(() => _subscriptionActive = active);
   }
 
   Future<void> _loadTutorialState() async {
@@ -424,18 +436,44 @@ class _CalendarPageState extends State<CalendarPage> {
       'claimed_by': userId,
       'claimed_by_name': widget.userName,
     }).eq('id', swapId);
+
+    final owners = await _supabase.from('profiles').select('id').eq('role', 'Owner');
+    for (final owner in (owners as List)) {
+      await NotificationService.notifyUser(
+        targetUserId: owner['id'] as String,
+        title: 'Swap needs approval',
+        body: '${widget.userName} requested to cover a posted shift.',
+      );
+    }
+
     setState(() {});
+  }
+
+  Future<void> _toggleSideworkCompletion(String taskId, bool completed) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      await _supabase.from('sidework').update({
+        'completed': completed,
+        'completed_at': completed ? DateTime.now().toIso8601String() : null,
+        'completed_by': completed ? userId : null,
+      }).eq('id', taskId);
+    } catch (e) {
+      _showBanner('Could not update sidework: $e', UniversalTheme.alertRed);
+    }
   }
 
   void _processAdminSwapAction(String swapId, String status) async {
     if (status == 'Approved') {
       final swap = await _supabase
           .from('swaps')
-          .select('shift_title, original_staff, shift_date, claimed_by_name')
+          .select('shift_title, original_staff, shift_date, claimed_by_name, claimed_by')
           .eq('id', swapId)
           .single();
 
       final claimerName = swap['claimed_by_name'] as String?;
+      final claimerId = swap['claimed_by'] as String?;
       if (claimerName == null || claimerName.isEmpty) {
         _showBanner('No staff member claimed this swap yet.', UniversalTheme.alertRed);
         return;
@@ -453,6 +491,14 @@ class _CalendarPageState extends State<CalendarPage> {
         await _supabase.from('shifts').update({'staff': claimerName}).eq('id', shiftTableId);
       }
       await _supabase.from('swaps').update({'status': 'Swapped'}).eq('id', swapId);
+
+      if (claimerId != null) {
+        await NotificationService.notifyUser(
+          targetUserId: claimerId,
+          title: 'Swap approved',
+          body: 'Your shift swap for ${swap['shift_title']} was approved.',
+        );
+      }
     } else {
       await _supabase.from('swaps').update({
         'status': 'Available',
@@ -515,6 +561,16 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _adminCreateShift() async {
+    if (!_subscriptionActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Activate your subscription in Billing before publishing shifts.'),
+          backgroundColor: UniversalTheme.alertRed,
+        ),
+      );
+      return;
+    }
+
     final enteredTitle = _adminShiftTitleController.text.trim();
     final title = enteredTitle.isEmpty ? 'General Support Shift' : enteredTitle;
 
@@ -547,6 +603,12 @@ class _CalendarPageState extends State<CalendarPage> {
 
     await _supabase.from('shifts').insert(rowsToInsert);
     _adminShiftTitleController.clear();
+
+    await NotificationService.notifyOrganization(
+      title: 'Schedule updated',
+      body: 'New shifts were published for ${targetDates.length} day(s).',
+      excludeUserId: _supabase.auth.currentUser?.id,
+    );
     
     setState(() {
       _adminSelectedDays.updateAll((key, value) => false);
@@ -622,13 +684,33 @@ class _CalendarPageState extends State<CalendarPage> {
                   )
                 else
                   ...displayedTasks.map((item) {
+                    final taskId = item['id']?.toString() ?? '';
+                    final completed = item['completed'] == true;
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5.0),
                       child: Row(
                         children: [
-                          Icon(Icons.check_box_outline_blank, size: 18, color: Colors.brown.shade300),
+                          InkWell(
+                            onTap: (_isOwner || item['assigned_to'] == widget.userName)
+                                ? () => _toggleSideworkCompletion(taskId, !completed)
+                                : null,
+                            child: Icon(
+                              completed ? Icons.check_box : Icons.check_box_outline_blank,
+                              size: 18,
+                              color: completed ? Colors.green : Colors.brown.shade300,
+                            ),
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(item['task']?.toString() ?? '', style: const TextStyle(fontSize: 14, color: UniversalTheme.darkSlate))),
+                          Expanded(
+                            child: Text(
+                              item['task']?.toString() ?? '',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: UniversalTheme.darkSlate,
+                                decoration: completed ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                          ),
                           if (_isOwner)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1107,6 +1189,32 @@ class _CalendarPageState extends State<CalendarPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (!_subscriptionActive)
+          Card(
+            color: const Color(0xFFFFF3E0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: Colors.orange.shade300),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              title: const Text('Subscription required', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Activate billing to publish shifts and unlock owner tools.'),
+              trailing: TextButton(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BillingPage()),
+                  );
+                  await _loadSubscriptionStatus();
+                },
+                child: const Text('Go to Billing'),
+              ),
+            ),
+          ),
+        if (!_subscriptionActive) const SizedBox(height: WiSenseSpacing.base),
+        const OrgInvitePanel(),
+        const SizedBox(height: WiSenseSpacing.base),
         Card(
           color: UniversalTheme.lightCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.brown.shade100)),
@@ -1298,9 +1406,12 @@ class _CalendarPageState extends State<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _adminCreateShift,
+                    onPressed: _subscriptionActive ? _adminCreateShift : null,
                     style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.darkSlate, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      _subscriptionActive ? 'Publish Shifts Live' : 'Subscribe to Publish Shifts',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -1366,6 +1477,8 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
           ),
           IconButton(icon: const Icon(Icons.logout, color: Colors.white, size: 20), onPressed: _handleLogOut),
+          const NotificationBell(),
+          const SizedBox(width: 4),
         ],
       ),
       body: Stack(
@@ -1721,10 +1834,24 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Future<void> _updateVacationStatus(String id, String targetStatus) async {
     try {
+      final existing = await _supabase
+          .from('time_off_requests')
+          .select('user_id, start_date, end_date')
+          .eq('id', id)
+          .maybeSingle();
+
       await _supabase
           .from('time_off_requests')
           .update({'status': targetStatus, 'notified': false})
           .eq('id', id);
+
+      if (existing != null) {
+        await NotificationService.notifyUser(
+          targetUserId: existing['user_id'] as String,
+          title: 'Time off $targetStatus',
+          body: 'Your request ${existing['start_date']} to ${existing['end_date']} was $targetStatus.',
+        );
+      }
 
       _showBanner('Request updated to $targetStatus', UniversalTheme.darkSlate);
       _loadScheduleData();

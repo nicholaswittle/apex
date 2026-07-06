@@ -68,8 +68,12 @@ flutter analyze && flutter test
 
 ## Features
 
-- Shift calendar and availability
-- Shift swap and time-off requests
-- Time clock and CSV export
-- Owner subscription tiers via Stripe
-- Push notifications (FCM → Supabase `profiles.push_token`)
+- Shift calendar and availability (full-date scheduling)
+- Shift swap board with owner approval and push/in-app notifications
+- Sidework checklists with completion tracking
+- Time-off requests with approval workflow
+- Time clock and CSV export (share sheet on mobile, download on web)
+- Owner subscription billing via Stripe + webhook
+- Organization invite codes for staff onboarding
+- Push notifications via Firebase Cloud Messaging
+- In-app notification center
