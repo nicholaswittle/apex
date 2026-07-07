@@ -82,9 +82,12 @@ Old builds insert shifts without `shift_date` (required). Deploy branch `cursor/
 
 Add your Vercel URL to Supabase **Authentication → URL Configuration → Redirect URLs**.
 
-### F12 console: Noto fonts warning
+### F12 console: white screen / blank page
 
-Harmless Flutter web warning. `web/index.html` preloads Noto Sans to reduce it.
+1. **Hard refresh** — old service worker may cache a broken deploy: open site → browser menu → clear cache / hard reload.
+2. **Vercel env vars** — `SUPABASE_URL` and `SUPABASE_ANON_KEY` must be set for **Preview** and **Production**, then **Redeploy**. Without them you should see a "Supabase not configured" screen (not white).
+3. **Deployment Protection** — preview iframes often show white; tap **Visit** or disable protection for previews.
+4. **Check browser console** — if JS fails to load, index.html now shows a red error message instead of a blank page.
 
 **"Supabase not configured" screen**  
 Vercel env vars missing or deploy happened before they were set → add vars → **Redeploy**.
