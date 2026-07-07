@@ -9,6 +9,7 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'core/notification_service.dart';
+import 'core/profile_service.dart';
 import 'widgets/org_invite_panel.dart';
 import 'widgets/notification_bell.dart';
 
@@ -34,6 +35,7 @@ class _CalendarPageState extends State<CalendarPage> {
   int _currentIndex = 0;
   
   bool _isSyncing = false;
+  bool _isPublishing = false;
   List<dynamic> _allRequests = [];
   bool _hasCheckedNotifications = false;
 
@@ -554,7 +556,7 @@ class _CalendarPageState extends State<CalendarPage> {
     await _executeDatabaseInsert(startStr, endStr, reasonText);
   }
 
-  void _adminCreateShift() async {
+  Future<void> _adminCreateShift() async {
     final enteredTitle = _adminShiftTitleController.text.trim();
     final title = enteredTitle.isEmpty ? 'General Support Shift' : enteredTitle;
 
@@ -564,45 +566,62 @@ class _CalendarPageState extends State<CalendarPage> {
         .toList();
 
     if (targetDates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please check at least one day to publish.'), backgroundColor: UniversalTheme.alertRed),
-      );
+      _showBanner('Please check at least one day to publish.', UniversalTheme.alertRed);
       return;
     }
 
-    final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
+    if (!_isOwner) {
+      _showBanner('Only owners can publish shifts.', UniversalTheme.alertRed);
+      return;
+    }
 
-    final rowsToInsert = targetDates.map((dateKey) {
-      final dayNum = DateTime.parse(dateKey).day;
-      return {
-        'shift_date': dateKey,
-        'day_num': dayNum,
-        'title': title,
-        'staff': _adminSelectedStaff ?? 'Open',
-        'notes': formattedHours,
-        'is_event': _adminIsEvent,
-        'zone': _adminSelectedZone,
-      };
-    }).toList();
+    setState(() => _isPublishing = true);
 
-    await _supabase.from('shifts').insert(rowsToInsert);
-    _adminShiftTitleController.clear();
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
 
-    await NotificationService.notifyOrganization(
-      title: 'Schedule updated',
-      body: 'New shifts were published for ${targetDates.length} day(s).',
-      excludeUserId: _supabase.auth.currentUser?.id,
-    );
-    
-    setState(() {
-      _adminSelectedDays.updateAll((key, value) => false);
-      _adminSelectedZone = null;
-    });
+      final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Shift successfully published across ${targetDates.length} days!'), backgroundColor: Colors.green),
-    );
+      final rowsToInsert = targetDates.map((dateKey) {
+        return {
+          'shift_date': dateKey,
+          'day_num': DateTime.parse(dateKey).day,
+          'title': title,
+          'staff': _adminSelectedStaff ?? 'Open',
+          'notes': formattedHours,
+          'is_event': _adminIsEvent,
+          'zone': _adminSelectedZone,
+          'organization_id': orgId,
+        };
+      }).toList();
+
+      await _supabase.from('shifts').insert(rowsToInsert);
+      _adminShiftTitleController.clear();
+
+      await NotificationService.notifyOrganization(
+        title: 'Schedule updated',
+        body: 'New shifts were published for ${targetDates.length} day(s).',
+        excludeUserId: _supabase.auth.currentUser?.id,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _adminSelectedDays.updateAll((key, value) => false);
+        _adminSelectedZone = null;
+      });
+
+      _showBanner('Shift successfully published across ${targetDates.length} days!', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not publish shifts: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not publish shifts: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isPublishing = false);
+    }
   }
 
   void _deleteShift(String shiftId, String title) async {
@@ -1367,9 +1386,15 @@ class _CalendarPageState extends State<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _adminCreateShift,
+                    onPressed: _isPublishing ? null : _adminCreateShift,
                     style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.darkSlate, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: _isPublishing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
