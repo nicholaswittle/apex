@@ -312,26 +312,30 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _changeMonth(int delta) {
     setState(() {
-      if (_isFullMonthView) {
-        int newMonth = _selectedDate.month + delta;
-        int newYear = _selectedDate.year;
+      int newMonth = _selectedDate.month + delta;
+      int newYear = _selectedDate.year;
 
-        if (newMonth > 12) {
-          newMonth = 1;
-          newYear++;
-        } else if (newMonth < 1) {
-          newMonth = 12;
-          newYear--;
-        }
-
-        int daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
-        int targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
-
-        _selectedDate = DateTime(newYear, newMonth, targetDay);
-      } else {
-        _selectedDate = _selectedDate.add(Duration(days: delta));
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+      } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
       }
+
+      final daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
+      final targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
+
+      _selectedDate = DateTime(newYear, newMonth, targetDay);
     });
+    _loadAvailabilityForDate(_selectedDate);
+  }
+
+  void _changeWeek(int weekDelta) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: weekDelta * 7));
+    });
+    _loadAvailabilityForDate(_selectedDate);
   }
 
   Future<void> _handleLogOut() async {
@@ -765,6 +769,7 @@ class _CalendarPageState extends State<CalendarPage> {
         _loadAvailabilityForDate(date);
       },
       onChangeMonth: _changeMonth,
+      onChangeWeek: _changeWeek,
       body: Column(
         children: [
           if (_showAckBanner)
