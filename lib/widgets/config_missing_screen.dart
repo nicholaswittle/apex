@@ -14,12 +14,12 @@ class ConfigMissingScreen extends StatelessWidget {
           padding: const EdgeInsets.all(32),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
+            child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.settings_suggest, size: 64, color: UniversalTheme.accent),
-                const SizedBox(height: 20),
-                const Text(
+                Icon(Icons.settings_suggest, size: 64, color: UniversalTheme.accent),
+                SizedBox(height: 20),
+                Text(
                   'Supabase not configured',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -28,16 +28,16 @@ class ConfigMissingScreen extends StatelessWidget {
                     color: UniversalTheme.darkSlate,
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
+                SizedBox(height: 12),
+                Text(
                   'Set these Vercel environment variables and redeploy:\n\n'
                   '• SUPABASE_URL\n'
                   '• SUPABASE_ANON_KEY',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey, height: 1.6),
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: 16),
+                Text(
                   'Also add your Vercel URL to Supabase → Authentication → URL Configuration.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.5),
