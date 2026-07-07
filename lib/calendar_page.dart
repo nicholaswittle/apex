@@ -36,6 +36,7 @@ class _CalendarPageState extends State<CalendarPage> {
   
   bool _isSyncing = false;
   bool _isPublishing = false;
+  bool _isAddingSidework = false;
   List<dynamic> _allRequests = [];
   bool _hasCheckedNotifications = false;
 
@@ -349,19 +350,47 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  void _addNewSideWork() async {
+  Future<void> _addNewSideWork() async {
     final taskText = _sideWorkController.text.trim();
-    if (taskText.isEmpty || _selectedAssignee == null) return;
+    if (taskText.isEmpty) {
+      _showBanner('Enter a sidework task first.', UniversalTheme.alertRed);
+      return;
+    }
+    if (_selectedAssignee == null) {
+      _showBanner('Select a staff member to assign this task.', UniversalTheme.alertRed);
+      return;
+    }
+    if (!_isOwner) {
+      _showBanner('Only owners can add sidework tasks.', UniversalTheme.alertRed);
+      return;
+    }
 
-    await _supabase.from('sidework').insert({
-      'task_date': _selectedDateKey,
-      'day_num': _selectedDate.day,
-      'task': taskText,
-      'assigned_to': _selectedAssignee,
-    });
+    setState(() => _isAddingSidework = true);
 
-    _sideWorkController.clear();
-    setState(() {}); 
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
+
+      await _supabase.from('sidework').insert({
+        'task_date': _selectedDateKey,
+        'day_num': _selectedDate.day,
+        'task': taskText,
+        'assigned_to': _selectedAssignee,
+        'organization_id': orgId,
+      });
+
+      _sideWorkController.clear();
+      _showBanner('Sidework task added.', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not add sidework: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not add sidework: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isAddingSidework = false);
+    }
   }
 
   void _handlePostSwap(String shiftTitle, String originalStaff) async {
@@ -759,13 +788,19 @@ class _CalendarPageState extends State<CalendarPage> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _addNewSideWork,
+                        onPressed: _isAddingSidework ? null : _addNewSideWork,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: UniversalTheme.darkSlate,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
-                        child: const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        child: _isAddingSidework
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
                       )
                     ],
                   ),
