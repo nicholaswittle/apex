@@ -10,20 +10,25 @@ import 'widgets/config_missing_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (AppConfig.hasSupabase) {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabaseAnonKey,
-    );
-  } else {
-    debugPrint(
-      'SUPABASE_URL / SUPABASE_ANON_KEY missing — pass --dart-define at build time.',
-    );
+  try {
+    if (AppConfig.hasSupabase) {
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        publishableKey: AppConfig.supabaseAnonKey,
+      );
+    } else {
+      debugPrint(
+        'SUPABASE_URL / SUPABASE_ANON_KEY missing — pass --dart-define at build time.',
+      );
+    }
+
+    await FirebaseBootstrap.initialize();
+    runApp(const MyApp());
+  } catch (error, stackTrace) {
+    debugPrint('Startup failed: $error');
+    debugPrint('$stackTrace');
+    runApp(_StartupErrorApp(message: error.toString()));
   }
-
-  await FirebaseBootstrap.initialize();
-
-  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -39,6 +44,31 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF9F6F0),
       ),
       home: const _AuthGate(),
+    );
+  }
+}
+
+class _StartupErrorApp extends StatelessWidget {
+  final String message;
+
+  const _StartupErrorApp({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        backgroundColor: const Color(0xFFF9F6F0),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Apex failed to start:\n$message',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF991B1B)),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

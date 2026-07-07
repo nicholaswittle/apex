@@ -36,6 +36,6 @@ if [[ -n "$SUPABASE_ANON_KEY" ]]; then
 fi
 
 echo "==> Building Flutter web (release)..."
-flutter build web --release "${DEFINES[@]}"
+flutter build web --release --no-wasm-dry-run --pwa-strategy=none "${DEFINES[@]}"
 
 echo "==> Output: $ROOT/build/web"
