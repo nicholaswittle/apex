@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
-import 'calendar_page.dart';
 import 'auth_page.dart';
+import 'calendar_page.dart';
 import 'core/app_config.dart';
 import 'core/firebase_bootstrap.dart';
+import 'core/profile_service.dart';
+import 'widgets/config_missing_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (AppConfig.hasStripe) {
-    Stripe.publishableKey = AppConfig.stripePublishableKey;
-  }
 
   if (AppConfig.hasSupabase) {
     await Supabase.initialize(
@@ -26,46 +23,74 @@ void main() async {
 
   await FirebaseBootstrap.initialize();
 
-  final session = AppConfig.hasSupabase
-      ? Supabase.instance.client.auth.currentSession
-      : null;
-
-  runApp(MyApp(initialSession: session));
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final Session? initialSession;
-  const MyApp({super.key, this.initialSession});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    String email = '';
-    String name = 'Team Member';
-    String role = 'Staff';
-
-    if (initialSession != null) {
-      email = initialSession!.user.email ?? '';
-      final meta = initialSession!.user.userMetadata;
-      if (meta != null) {
-        name = meta['userName'] ?? meta['name'] ?? meta['display_name'] ?? 'Team Member';
-        role = meta['userRole'] ?? meta['role'] ?? 'Staff';
-      }
-    }
-
     return MaterialApp(
       title: 'Apex',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF9F6F0), // Matches your light card background style
+        scaffoldBackgroundColor: const Color(0xFFF9F6F0),
       ),
-      home: initialSession != null
-          ? CalendarPage(
-              userEmail: email,
-              userName: name,
-              userRole: role,
-            )
-          : const AuthPage(),
+      home: const _AuthGate(),
+    );
+  }
+}
+
+class _AuthGate extends StatefulWidget {
+  const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+    if (!AppConfig.hasSupabase) return;
+    Supabase.instance.client.auth.onAuthStateChange.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppConfig.hasSupabase) {
+      return const ConfigMissingScreen();
+    }
+
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) {
+      return const AuthPage();
+    }
+
+    return FutureBuilder(
+      future: ProfileService.loadCurrentProfile(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final profile = snapshot.data;
+        if (profile == null) {
+          return const AuthPage();
+        }
+
+        return CalendarPage(
+          userEmail: profile.email,
+          userName: profile.name,
+          userRole: profile.role,
+        );
+      },
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apex/theme.dart';
 import 'package:wisense_ui/wisense_ui.dart';
 import 'auth_page.dart';
@@ -7,7 +8,10 @@ import 'widgets/staff_availability_card.dart';
 import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
-import 'billing_page.dart';
+import 'core/notification_service.dart';
+import 'core/profile_service.dart';
+import 'widgets/org_invite_panel.dart';
+import 'widgets/notification_bell.dart';
 
 
 class CalendarPage extends StatefulWidget {
@@ -31,6 +35,8 @@ class _CalendarPageState extends State<CalendarPage> {
   int _currentIndex = 0;
   
   bool _isSyncing = false;
+  bool _isPublishing = false;
+  bool _isAddingSidework = false;
   List<dynamic> _allRequests = [];
   bool _hasCheckedNotifications = false;
 
@@ -72,12 +78,17 @@ class _CalendarPageState extends State<CalendarPage> {
   ];
 
   late DateTime _adminTargetWeekAnchor;
-  final Map<int, bool> _adminSelectedDays = {};
-  final Map<int, String> _dayLabels = {};
+  final Map<String, bool> _adminSelectedDays = {};
+  final Map<String, String> _dayLabels = {};
 
   final _supabase = Supabase.instance.client;
 
   bool get _isOwner => widget.userRole == 'Owner';
+
+  String _dateKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String get _selectedDateKey => _dateKey(_selectedDate);
 
   @override
   void initState() {
@@ -89,6 +100,19 @@ class _CalendarPageState extends State<CalendarPage> {
     _loadStaffNames();
     _loadTimeEntries();
     _listenToNewShifts();
+    _loadTutorialState();
+  }
+
+  Future<void> _loadTutorialState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool('tutorial_dismissed_${widget.userEmail}') ?? false;
+    if (mounted) setState(() => _showTutorial = !dismissed);
+  }
+
+  Future<void> _dismissTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tutorial_dismissed_${widget.userEmail}', true);
+    if (mounted) setState(() => _showTutorial = false);
   }
 
   Future<void> _loadStaffNames() async {
@@ -276,8 +300,9 @@ class _CalendarPageState extends State<CalendarPage> {
 
     for (int i = 0; i < 7; i++) {
       DateTime day = monday.add(Duration(days: i));
-      _adminSelectedDays[day.day] = false;
-      _dayLabels[day.day] = '${shortNames[i]} (${monthNames[day.month - 1]} ${day.day})';
+      final key = _dateKey(day);
+      _adminSelectedDays[key] = false;
+      _dayLabels[key] = '${shortNames[i]} (${monthNames[day.month - 1]} ${day.day})';
     }
   }
 
@@ -290,47 +315,82 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _changeMonth(int delta) {
     setState(() {
-      if (_isFullMonthView) {
-        int newMonth = _selectedDate.month + delta;
-        int newYear = _selectedDate.year;
+      int newMonth = _selectedDate.month + delta;
+      int newYear = _selectedDate.year;
 
-        if (newMonth > 12) {
-          newMonth = 1;
-          newYear++;
-        } else if (newMonth < 1) {
-          newMonth = 12;
-          newYear--;
-        }
-
-        int daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
-        int targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
-
-        _selectedDate = DateTime(newYear, newMonth, targetDay);
-      } else {
-        _selectedDate = _selectedDate.add(Duration(days: delta));
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+      } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
       }
+
+      final daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
+      final targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
+
+      _selectedDate = DateTime(newYear, newMonth, targetDay);
     });
+    _loadAvailabilityForDate(_selectedDate);
   }
 
-  void _handleLogOut() {
+  void _changeWeek(int weekDelta) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: weekDelta * 7));
+    });
+    _loadAvailabilityForDate(_selectedDate);
+  }
+
+  Future<void> _handleLogOut() async {
+    await _supabase.auth.signOut();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const AuthPage()),
     );
   }
 
-  void _addNewSideWork() async {
+  Future<void> _addNewSideWork() async {
     final taskText = _sideWorkController.text.trim();
-    if (taskText.isEmpty || _selectedAssignee == null) return;
+    if (taskText.isEmpty) {
+      _showBanner('Enter a sidework task first.', UniversalTheme.alertRed);
+      return;
+    }
+    if (_selectedAssignee == null) {
+      _showBanner('Select a staff member to assign this task.', UniversalTheme.alertRed);
+      return;
+    }
+    if (!_isOwner) {
+      _showBanner('Only owners can add sidework tasks.', UniversalTheme.alertRed);
+      return;
+    }
 
-    await _supabase.from('sidework').insert({
-      'day_num': _selectedDate.day,
-      'task': taskText,
-      'assigned_to': _selectedAssignee,
-    });
+    setState(() => _isAddingSidework = true);
 
-    _sideWorkController.clear();
-    setState(() {}); 
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
+
+      await _supabase.from('sidework').insert({
+        'task_date': _selectedDateKey,
+        'day_num': _selectedDate.day,
+        'task': taskText,
+        'assigned_to': _selectedAssignee,
+        'organization_id': orgId,
+      });
+
+      _sideWorkController.clear();
+      _showBanner('Sidework task added.', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not add sidework: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not add sidework: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isAddingSidework = false);
+    }
   }
 
   void _handlePostSwap(String shiftTitle, String originalStaff) async {
@@ -355,6 +415,7 @@ class _CalendarPageState extends State<CalendarPage> {
       await _supabase.from('swaps').insert({
         'shift_title': shiftTitle,
         'original_staff': originalStaff,
+        'shift_date': _selectedDateKey,
         'day_num': _selectedDate.day,
         'status': 'Available',
       });
@@ -392,26 +453,83 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _claimShift(String swapId) async {
-    await _supabase.from('swaps').update({'status': 'Pending Approval'}).eq('id', swapId);
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _supabase.from('swaps').update({
+      'status': 'Pending Approval',
+      'claimed_by': userId,
+      'claimed_by_name': widget.userName,
+    }).eq('id', swapId);
+
+    final owners = await _supabase.from('profiles').select('id').eq('role', 'Owner');
+    for (final owner in (owners as List)) {
+      await NotificationService.notifyUser(
+        targetUserId: owner['id'] as String,
+        title: 'Swap needs approval',
+        body: '${widget.userName} requested to cover a posted shift.',
+      );
+    }
+
     setState(() {});
   }
 
-  void _processAdminSwapAction(String swapId, String status, String title, String currentStaff, int dayNum) async {
+  Future<void> _toggleSideworkCompletion(String taskId, bool completed) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      await _supabase.from('sidework').update({
+        'completed': completed,
+        'completed_at': completed ? DateTime.now().toIso8601String() : null,
+        'completed_by': completed ? userId : null,
+      }).eq('id', taskId);
+    } catch (e) {
+      _showBanner('Could not update sidework: $e', UniversalTheme.alertRed);
+    }
+  }
+
+  void _processAdminSwapAction(String swapId, String status) async {
     if (status == 'Approved') {
+      final swap = await _supabase
+          .from('swaps')
+          .select('shift_title, original_staff, shift_date, claimed_by_name, claimed_by')
+          .eq('id', swapId)
+          .single();
+
+      final claimerName = swap['claimed_by_name'] as String?;
+      final claimerId = swap['claimed_by'] as String?;
+      if (claimerName == null || claimerName.isEmpty) {
+        _showBanner('No staff member claimed this swap yet.', UniversalTheme.alertRed);
+        return;
+      }
+
       final List<dynamic> matchingShifts = await _supabase
           .from('shifts')
           .select('id')
-          .eq('day_num', dayNum)
-          .eq('title', title)
-          .eq('staff', currentStaff);
+          .eq('shift_date', swap['shift_date'])
+          .eq('title', swap['shift_title'])
+          .eq('staff', swap['original_staff']);
 
       if (matchingShifts.isNotEmpty) {
         String shiftTableId = matchingShifts.first['id'].toString();
-        await _supabase.from('shifts').update({'staff': 'Covered'}).eq('id', shiftTableId);
+        await _supabase.from('shifts').update({'staff': claimerName}).eq('id', shiftTableId);
       }
       await _supabase.from('swaps').update({'status': 'Swapped'}).eq('id', swapId);
+
+      if (claimerId != null) {
+        await NotificationService.notifyUser(
+          targetUserId: claimerId,
+          title: 'Swap approved',
+          body: 'Your shift swap for ${swap['shift_title']} was approved.',
+        );
+      }
     } else {
-      await _supabase.from('swaps').update({'status': 'Available'}).eq('id', swapId);
+      await _supabase.from('swaps').update({
+        'status': 'Available',
+        'claimed_by': null,
+        'claimed_by_name': null,
+      }).eq('id', swapId);
     }
     setState(() {});
   }
@@ -467,45 +585,72 @@ class _CalendarPageState extends State<CalendarPage> {
     await _executeDatabaseInsert(startStr, endStr, reasonText);
   }
 
-  void _adminCreateShift() async {
+  Future<void> _adminCreateShift() async {
     final enteredTitle = _adminShiftTitleController.text.trim();
     final title = enteredTitle.isEmpty ? 'General Support Shift' : enteredTitle;
 
-    final List<int> targetDays = _adminSelectedDays.entries
+    final List<String> targetDates = _adminSelectedDays.entries
         .where((entry) => entry.value == true)
         .map((entry) => entry.key)
         .toList();
 
-    if (targetDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please check at least one day to publish.'), backgroundColor: UniversalTheme.alertRed),
-      );
+    if (targetDates.isEmpty) {
+      _showBanner('Please check at least one day to publish.', UniversalTheme.alertRed);
       return;
     }
 
-    final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
+    if (!_isOwner) {
+      _showBanner('Only owners can publish shifts.', UniversalTheme.alertRed);
+      return;
+    }
 
-    final rowsToInsert = targetDays.map((dayNum) => {
-      'day_num': dayNum,
-      'title': title,
-      'staff': _adminSelectedStaff ?? 'Open',
-      'notes': formattedHours,
-      'is_event': _adminIsEvent,
-      'zone': _adminSelectedZone,
-    }).toList();
+    setState(() => _isPublishing = true);
 
-    await _supabase.from('shifts').insert(rowsToInsert);
-    _adminShiftTitleController.clear();
-    
-    setState(() {
-      _adminSelectedDays.updateAll((key, value) => false);
-      _adminSelectedZone = null;
-    });
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Shift successfully published across ${targetDays.length} days!'), backgroundColor: Colors.green),
-    );
+      final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
+
+      final rowsToInsert = targetDates.map((dateKey) {
+        return {
+          'shift_date': dateKey,
+          'day_num': DateTime.parse(dateKey).day,
+          'title': title,
+          'staff': _adminSelectedStaff ?? 'Open',
+          'notes': formattedHours,
+          'is_event': _adminIsEvent,
+          'zone': _adminSelectedZone,
+          'organization_id': orgId,
+        };
+      }).toList();
+
+      await _supabase.from('shifts').insert(rowsToInsert);
+      _adminShiftTitleController.clear();
+
+      await NotificationService.notifyOrganization(
+        title: 'Schedule updated',
+        body: 'New shifts were published for ${targetDates.length} day(s).',
+        excludeUserId: _supabase.auth.currentUser?.id,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _adminSelectedDays.updateAll((key, value) => false);
+        _adminSelectedZone = null;
+      });
+
+      _showBanner('Shift successfully published across ${targetDates.length} days!', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not publish shifts: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not publish shifts: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isPublishing = false);
+    }
   }
 
   void _deleteShift(String shiftId, String title) async {
@@ -535,7 +680,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildSideWorkSection() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+      stream: _supabase.from('sidework').stream(primaryKey: ['id']).eq('task_date', _selectedDateKey),
       builder: (context, snapshot) {
         final allTasks = snapshot.data ?? [];
         final displayedTasks = _isOwner ? allTasks : allTasks.where((t) => t['assigned_to'] == widget.userName).toList();
@@ -571,13 +716,33 @@ class _CalendarPageState extends State<CalendarPage> {
                   )
                 else
                   ...displayedTasks.map((item) {
+                    final taskId = item['id']?.toString() ?? '';
+                    final completed = item['completed'] == true;
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5.0),
                       child: Row(
                         children: [
-                          Icon(Icons.check_box_outline_blank, size: 18, color: Colors.brown.shade300),
+                          InkWell(
+                            onTap: (_isOwner || item['assigned_to'] == widget.userName)
+                                ? () => _toggleSideworkCompletion(taskId, !completed)
+                                : null,
+                            child: Icon(
+                              completed ? Icons.check_box : Icons.check_box_outline_blank,
+                              size: 18,
+                              color: completed ? Colors.green : Colors.brown.shade300,
+                            ),
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(item['task']?.toString() ?? '', style: const TextStyle(fontSize: 14, color: UniversalTheme.darkSlate))),
+                          Expanded(
+                            child: Text(
+                              item['task']?.toString() ?? '',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: UniversalTheme.darkSlate,
+                                decoration: completed ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                          ),
                           if (_isOwner)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -623,13 +788,19 @@ class _CalendarPageState extends State<CalendarPage> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _addNewSideWork,
+                        onPressed: _isAddingSidework ? null : _addNewSideWork,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: UniversalTheme.darkSlate,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
-                        child: const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        child: _isAddingSidework
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
                       )
                     ],
                   ),
@@ -652,6 +823,7 @@ class _CalendarPageState extends State<CalendarPage> {
         _loadAvailabilityForDate(date);
       },
       onChangeMonth: _changeMonth,
+      onChangeWeek: _changeWeek,
       body: Column(
         children: [
           if (_showAckBanner)
@@ -686,7 +858,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 _buildSideWorkSection(),
                 const SizedBox(height: 6),
                 StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('day_num', _selectedDate.day),
+                  stream: _supabase.from('shifts').stream(primaryKey: ['id']).eq('shift_date', _selectedDateKey),
                   builder: (context, snapshot) {
                     final currentShifts = snapshot.data ?? [];
                     final dateIsoStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
@@ -727,7 +899,12 @@ class _CalendarPageState extends State<CalendarPage> {
                           final title = shift['title']?.toString() ?? '';
                           final staff = shift['staff']?.toString() ?? 'Open';
                           if (shift['is_event'] == true) {
-                            return _buildEventCard(id, title, staff, '1pm - 5pm');
+                            return _buildEventCard(
+                              id,
+                              title,
+                              staff,
+                              shift['notes']?.toString() ?? 'See schedule',
+                            );
                           }
                           return _buildShiftCard(
                             shiftId: id,
@@ -757,7 +934,14 @@ class _CalendarPageState extends State<CalendarPage> {
       stream: _supabase.from('swaps').stream(primaryKey: ['id']).order('created_at', ascending: false),
       builder: (context, snapshot) {
         final allSwaps = snapshot.data ?? [];
-        final availableSwaps = allSwaps.where((swap) => (swap['day_num'] as int) >= _selectedDate.day).toList();
+        final selectedDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+        final availableSwaps = allSwaps.where((swap) {
+          final rawDate = swap['shift_date']?.toString();
+          if (rawDate == null || rawDate.isEmpty) return false;
+          final shiftDate = DateTime.parse(rawDate);
+          final swapDay = DateTime(shiftDate.year, shiftDate.month, shiftDate.day);
+          return !swapDay.isBefore(selectedDay);
+        }).toList();
 
         if (availableSwaps.isEmpty) {
           return const Center(
@@ -795,7 +979,12 @@ class _CalendarPageState extends State<CalendarPage> {
                         children: [
                           Text(swap['shift_title']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: UniversalTheme.darkSlate)),
                           const SizedBox(height: 4),
-                          Text('Day: ${swap['day_num']}', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                          Text(
+                            swap['shift_date'] != null
+                                ? 'Date: ${swap['shift_date']}'
+                                : 'Date unavailable',
+                            style: const TextStyle(color: Colors.black54, fontSize: 13),
+                          ),
                           Text('Posted By: ${swap['original_staff']}', style: const TextStyle(color: Colors.brown, fontStyle: FontStyle.italic, fontSize: 12)),
                         ],
                       ),
@@ -828,15 +1017,11 @@ class _CalendarPageState extends State<CalendarPage> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                                onPressed: () => _processAdminSwapAction(
-                                  swap['id'], 'Approved', swap['shift_title'], swap['original_staff'], swap['day_num']
-                                ),
+                                onPressed: () => _processAdminSwapAction(swap['id'], 'Approved'),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.cancel, color: UniversalTheme.alertRed, size: 28),
-                                onPressed: () => _processAdminSwapAction(
-                                  swap['id'], 'Denied', swap['shift_title'], swap['original_staff'], swap['day_num']
-                                ),
+                                onPressed: () => _processAdminSwapAction(swap['id'], 'Denied'),
                               ),
                             ],
                           )
@@ -1043,6 +1228,8 @@ class _CalendarPageState extends State<CalendarPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const OrgInvitePanel(),
+        const SizedBox(height: WiSenseSpacing.base),
         Card(
           color: UniversalTheme.lightCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.brown.shade100)),
@@ -1198,16 +1385,16 @@ class _CalendarPageState extends State<CalendarPage> {
                               color: Colors.white,
                             ),
                             child: Column(
-                              children: _adminSelectedDays.keys.map((dayNum) {
+                              children: _adminSelectedDays.keys.map((dateKey) {
                                 return CheckboxListTile(
-                                  title: Text(_dayLabels[dayNum] ?? 'Day $dayNum', style: const TextStyle(fontSize: 12, color: UniversalTheme.darkSlate)),
-                                  value: _adminSelectedDays[dayNum],
+                                  title: Text(_dayLabels[dateKey] ?? dateKey, style: const TextStyle(fontSize: 12, color: UniversalTheme.darkSlate)),
+                                  value: _adminSelectedDays[dateKey],
                                   dense: true,
                                   activeColor: UniversalTheme.accent,
                                   contentPadding: EdgeInsets.zero,
                                   onChanged: (bool? val) {
                                     setState(() {
-                                      _adminSelectedDays[dayNum] = val ?? false;
+                                      _adminSelectedDays[dateKey] = val ?? false;
                                     });
                                   },
                                 );
@@ -1234,9 +1421,15 @@ class _CalendarPageState extends State<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _adminCreateShift,
+                    onPressed: _isPublishing ? null : _adminCreateShift,
                     style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.darkSlate, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: _isPublishing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -1247,30 +1440,6 @@ class _CalendarPageState extends State<CalendarPage> {
         CsvTimeCardExporter(
           staffRates: _staffRates,
           disabled: _isSyncing,
-        ),
-        const SizedBox(height: WiSenseSpacing.base),
-        Card(
-          color: UniversalTheme.lightCard,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.brown.shade100),
-          ),
-          child: ListTile(
-            leading: const Icon(Icons.payment, color: UniversalTheme.accent),
-            title: const Text(
-              'Manage Billing',
-              style: TextStyle(fontWeight: FontWeight.bold, color: UniversalTheme.darkSlate),
-            ),
-            subtitle: const Text(
-              'View subscription plan and payment gateway',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            trailing: const Icon(Icons.chevron_right, color: UniversalTheme.darkSlate),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const BillingPage()),
-            ),
-          ),
         ),
       ],
     );
@@ -1302,6 +1471,8 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
           ),
           IconButton(icon: const Icon(Icons.logout, color: Colors.white, size: 20), onPressed: _handleLogOut),
+          const NotificationBell(),
+          const SizedBox(width: 4),
         ],
       ),
       body: Stack(
@@ -1319,7 +1490,7 @@ class _CalendarPageState extends State<CalendarPage> {
         onTap: (index) {
           setState(() {
             _currentIndex = index;
-            if (index != 3 && _isOwner) _showTutorial = false;
+            if (index != 3 && _isOwner && _showTutorial) _dismissTutorial();
           });
         },
         items: const [
@@ -1458,7 +1629,14 @@ class _CalendarPageState extends State<CalendarPage> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.accent), child: const Text('Sign Up', style: TextStyle(color: Colors.white))),
+                ElevatedButton(
+                  onPressed: _isOnVacation ? null : () => _claimOpenTemplateShift(shiftId, title),
+                  style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.accent),
+                  child: Text(
+                    _isOnVacation ? 'On Vacation' : 'Sign Up',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
                 if (_isOwner) ...[
                   const SizedBox(width: 4),
                   IconButton(icon: const Icon(Icons.delete_outline, color: UniversalTheme.alertRed, size: 20), onPressed: () => _deleteShift(shiftId, title)),
@@ -1526,7 +1704,7 @@ class _CalendarPageState extends State<CalendarPage> {
                             if (_tutorialStep < 3) {
                               _tutorialStep++;
                             } else {
-                              _showTutorial = false;
+                              _dismissTutorial();
                             }
                           });
                         },
@@ -1650,10 +1828,24 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Future<void> _updateVacationStatus(String id, String targetStatus) async {
     try {
+      final existing = await _supabase
+          .from('time_off_requests')
+          .select('user_id, start_date, end_date')
+          .eq('id', id)
+          .maybeSingle();
+
       await _supabase
           .from('time_off_requests')
           .update({'status': targetStatus, 'notified': false})
           .eq('id', id);
+
+      if (existing != null) {
+        await NotificationService.notifyUser(
+          targetUserId: existing['user_id'] as String,
+          title: 'Time off $targetStatus',
+          body: 'Your request ${existing['start_date']} to ${existing['end_date']} was $targetStatus.',
+        );
+      }
 
       _showBanner('Request updated to $targetStatus', UniversalTheme.darkSlate);
       _loadScheduleData();

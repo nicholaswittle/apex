@@ -12,4 +12,7 @@ abstract final class AppConfig {
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   static bool get hasStripe => stripePublishableKey.isNotEmpty;
+
+  /// Owner billing via Stripe — disabled until post-launch monetization.
+  static const billingEnabled = false;
 }
