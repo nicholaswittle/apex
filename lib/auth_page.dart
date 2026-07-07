@@ -87,10 +87,13 @@ class _AuthPageState extends State<AuthPage> {
     if (error is AuthException) {
       if (error.code == 'user_already_exists' ||
           error.message.toLowerCase().contains('already registered')) {
-        return 'This email is already registered. Use Sign In below, or add your invite code and sign in.';
+        return 'This email is already registered. Sign in with your password below.';
       }
       if (error.code == 'invalid_credentials') {
         return 'Incorrect email or password.';
+      }
+      if (error.code == 'email_not_confirmed') {
+        return 'Check your email to confirm your account, then sign in.';
       }
     }
 
@@ -99,7 +102,7 @@ class _AuthPageState extends State<AuthPage> {
       return 'That invite code is invalid. Ask your manager for a new one.';
     }
     if (text.contains('already been used')) {
-      return 'That invite code has already been used.';
+      return 'That invite code has already been used. Try signing in — your account may already exist.';
     }
     if (text.contains('expired')) {
       return 'That invite code has expired. Ask your manager for a new one.';
@@ -108,9 +111,16 @@ class _AuthPageState extends State<AuthPage> {
     return 'Authentication failed. Check your credentials and try again.';
   }
 
-  Future<void> _redeemInviteIfProvided(String inviteCode) async {
+  Future<void> _redeemInviteIfNeeded(String inviteCode) async {
     if (inviteCode.isEmpty || _needsOwnerSetup) return;
-    await ProfileService.redeemInvite(inviteCode);
+
+    try {
+      await ProfileService.redeemInvite(inviteCode);
+    } catch (error) {
+      final text = error.toString().toLowerCase();
+      if (text.contains('already been used')) return;
+      rethrow;
+    }
   }
 
   Future<void> _handleSubmit() async {
@@ -132,6 +142,7 @@ class _AuthPageState extends State<AuthPage> {
     setState(() => _isLoading = true);
 
     var treatAsSignIn = !_isSignUp;
+    var signupJustSucceeded = false;
 
     try {
       if (_isSignUp) {
@@ -142,18 +153,29 @@ class _AuthPageState extends State<AuthPage> {
         };
 
         try {
-          await _supabase.auth.signUp(
+          final response = await _supabase.auth.signUp(
             email: email,
             password: password,
             data: metadata,
           );
+
+          if (response.session == null && response.user != null) {
+            _showBanner(
+              'Account created! Check your email to confirm, then sign in with your invite code.',
+              Colors.green,
+            );
+            if (mounted) setState(() => _isSignUp = false);
+            return;
+          }
+
+          signupJustSucceeded = true;
           _showBanner('Registration successful! Logging you in...', Colors.green);
         } on AuthException catch (error) {
           if (error.code == 'user_already_exists' ||
               error.message.toLowerCase().contains('already registered')) {
             treatAsSignIn = true;
             _showBanner(
-              'Account already exists. Signing you in with your invite code...',
+              'Account already exists. Signing you in...',
               UniversalTheme.darkSlate,
             );
           } else {
@@ -167,14 +189,27 @@ class _AuthPageState extends State<AuthPage> {
         password: password,
       );
 
-      if (inviteCode.isNotEmpty && !_needsOwnerSetup) {
-        await _redeemInviteIfProvided(inviteCode);
+      try {
+        await _redeemInviteIfNeeded(inviteCode);
+      } catch (e) {
+        if (signupJustSucceeded) {
+          final profile = await ProfileService.loadCurrentProfile();
+          if (profile != null && mounted) {
+            _showBanner(
+              'Account created and signed in. If shifts look wrong, ask your manager for a new invite code.',
+              UniversalTheme.darkSlate,
+            );
+            await _navigateToCalendar();
+            return;
+          }
+        }
+        rethrow;
       }
 
       await _navigateToCalendar();
     } catch (e) {
-      if (treatAsSignIn && _isSignUp) {
-        if (mounted) setState(() => _isSignUp = false);
+      if (treatAsSignIn && _isSignUp && mounted) {
+        setState(() => _isSignUp = false);
       }
       _showBanner(_authErrorMessage(e), UniversalTheme.alertRed);
     } finally {

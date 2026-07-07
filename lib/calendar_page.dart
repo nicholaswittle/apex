@@ -9,6 +9,7 @@ import 'widgets/shift_calendar_grid.dart';
 import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'core/notification_service.dart';
+import 'core/profile_service.dart';
 import 'widgets/org_invite_panel.dart';
 import 'widgets/notification_bell.dart';
 
@@ -34,6 +35,8 @@ class _CalendarPageState extends State<CalendarPage> {
   int _currentIndex = 0;
   
   bool _isSyncing = false;
+  bool _isPublishing = false;
+  bool _isAddingSidework = false;
   List<dynamic> _allRequests = [];
   bool _hasCheckedNotifications = false;
 
@@ -312,26 +315,30 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _changeMonth(int delta) {
     setState(() {
-      if (_isFullMonthView) {
-        int newMonth = _selectedDate.month + delta;
-        int newYear = _selectedDate.year;
+      int newMonth = _selectedDate.month + delta;
+      int newYear = _selectedDate.year;
 
-        if (newMonth > 12) {
-          newMonth = 1;
-          newYear++;
-        } else if (newMonth < 1) {
-          newMonth = 12;
-          newYear--;
-        }
-
-        int daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
-        int targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
-
-        _selectedDate = DateTime(newYear, newMonth, targetDay);
-      } else {
-        _selectedDate = _selectedDate.add(Duration(days: delta));
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+      } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
       }
+
+      final daysInNewMonth = DateTime(newYear, newMonth + 1, 0).day;
+      final targetDay = _selectedDate.day > daysInNewMonth ? daysInNewMonth : _selectedDate.day;
+
+      _selectedDate = DateTime(newYear, newMonth, targetDay);
     });
+    _loadAvailabilityForDate(_selectedDate);
+  }
+
+  void _changeWeek(int weekDelta) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: weekDelta * 7));
+    });
+    _loadAvailabilityForDate(_selectedDate);
   }
 
   Future<void> _handleLogOut() async {
@@ -343,19 +350,47 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  void _addNewSideWork() async {
+  Future<void> _addNewSideWork() async {
     final taskText = _sideWorkController.text.trim();
-    if (taskText.isEmpty || _selectedAssignee == null) return;
+    if (taskText.isEmpty) {
+      _showBanner('Enter a sidework task first.', UniversalTheme.alertRed);
+      return;
+    }
+    if (_selectedAssignee == null) {
+      _showBanner('Select a staff member to assign this task.', UniversalTheme.alertRed);
+      return;
+    }
+    if (!_isOwner) {
+      _showBanner('Only owners can add sidework tasks.', UniversalTheme.alertRed);
+      return;
+    }
 
-    await _supabase.from('sidework').insert({
-      'task_date': _selectedDateKey,
-      'day_num': _selectedDate.day,
-      'task': taskText,
-      'assigned_to': _selectedAssignee,
-    });
+    setState(() => _isAddingSidework = true);
 
-    _sideWorkController.clear();
-    setState(() {}); 
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
+
+      await _supabase.from('sidework').insert({
+        'task_date': _selectedDateKey,
+        'day_num': _selectedDate.day,
+        'task': taskText,
+        'assigned_to': _selectedAssignee,
+        'organization_id': orgId,
+      });
+
+      _sideWorkController.clear();
+      _showBanner('Sidework task added.', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not add sidework: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not add sidework: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isAddingSidework = false);
+    }
   }
 
   void _handlePostSwap(String shiftTitle, String originalStaff) async {
@@ -550,7 +585,7 @@ class _CalendarPageState extends State<CalendarPage> {
     await _executeDatabaseInsert(startStr, endStr, reasonText);
   }
 
-  void _adminCreateShift() async {
+  Future<void> _adminCreateShift() async {
     final enteredTitle = _adminShiftTitleController.text.trim();
     final title = enteredTitle.isEmpty ? 'General Support Shift' : enteredTitle;
 
@@ -560,45 +595,62 @@ class _CalendarPageState extends State<CalendarPage> {
         .toList();
 
     if (targetDates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please check at least one day to publish.'), backgroundColor: UniversalTheme.alertRed),
-      );
+      _showBanner('Please check at least one day to publish.', UniversalTheme.alertRed);
       return;
     }
 
-    final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
+    if (!_isOwner) {
+      _showBanner('Only owners can publish shifts.', UniversalTheme.alertRed);
+      return;
+    }
 
-    final rowsToInsert = targetDates.map((dateKey) {
-      final dayNum = DateTime.parse(dateKey).day;
-      return {
-        'shift_date': dateKey,
-        'day_num': dayNum,
-        'title': title,
-        'staff': _adminSelectedStaff ?? 'Open',
-        'notes': formattedHours,
-        'is_event': _adminIsEvent,
-        'zone': _adminSelectedZone,
-      };
-    }).toList();
+    setState(() => _isPublishing = true);
 
-    await _supabase.from('shifts').insert(rowsToInsert);
-    _adminShiftTitleController.clear();
+    try {
+      final orgId = await ProfileService.loadOrganizationId();
+      if (orgId == null) {
+        _showBanner('Could not load your organization. Try signing out and back in.', UniversalTheme.alertRed);
+        return;
+      }
 
-    await NotificationService.notifyOrganization(
-      title: 'Schedule updated',
-      body: 'New shifts were published for ${targetDates.length} day(s).',
-      excludeUserId: _supabase.auth.currentUser?.id,
-    );
-    
-    setState(() {
-      _adminSelectedDays.updateAll((key, value) => false);
-      _adminSelectedZone = null;
-    });
+      final formattedHours = 'Shift: $_adminStartTime - $_adminEndTime';
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Shift successfully published across ${targetDates.length} days!'), backgroundColor: Colors.green),
-    );
+      final rowsToInsert = targetDates.map((dateKey) {
+        return {
+          'shift_date': dateKey,
+          'day_num': DateTime.parse(dateKey).day,
+          'title': title,
+          'staff': _adminSelectedStaff ?? 'Open',
+          'notes': formattedHours,
+          'is_event': _adminIsEvent,
+          'zone': _adminSelectedZone,
+          'organization_id': orgId,
+        };
+      }).toList();
+
+      await _supabase.from('shifts').insert(rowsToInsert);
+      _adminShiftTitleController.clear();
+
+      await NotificationService.notifyOrganization(
+        title: 'Schedule updated',
+        body: 'New shifts were published for ${targetDates.length} day(s).',
+        excludeUserId: _supabase.auth.currentUser?.id,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _adminSelectedDays.updateAll((key, value) => false);
+        _adminSelectedZone = null;
+      });
+
+      _showBanner('Shift successfully published across ${targetDates.length} days!', Colors.green);
+    } on PostgrestException catch (e) {
+      _showBanner('Could not publish shifts: ${e.message}', UniversalTheme.alertRed);
+    } catch (e) {
+      _showBanner('Could not publish shifts: $e', UniversalTheme.alertRed);
+    } finally {
+      if (mounted) setState(() => _isPublishing = false);
+    }
   }
 
   void _deleteShift(String shiftId, String title) async {
@@ -736,13 +788,19 @@ class _CalendarPageState extends State<CalendarPage> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _addNewSideWork,
+                        onPressed: _isAddingSidework ? null : _addNewSideWork,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: UniversalTheme.darkSlate,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
-                        child: const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        child: _isAddingSidework
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12)),
                       )
                     ],
                   ),
@@ -765,6 +823,7 @@ class _CalendarPageState extends State<CalendarPage> {
         _loadAvailabilityForDate(date);
       },
       onChangeMonth: _changeMonth,
+      onChangeWeek: _changeWeek,
       body: Column(
         children: [
           if (_showAckBanner)
@@ -1362,9 +1421,15 @@ class _CalendarPageState extends State<CalendarPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _adminCreateShift,
+                    onPressed: _isPublishing ? null : _adminCreateShift,
                     style: ElevatedButton.styleFrom(backgroundColor: UniversalTheme.darkSlate, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: _isPublishing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Publish Shifts Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
