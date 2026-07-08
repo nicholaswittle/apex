@@ -92,6 +92,12 @@
       }
     }, 30000);
   </script>
+  <!-- Required by supabase_flutter's transitive passkeys_web dependency:
+       PasskeysWeb.registerWith() checks for window.PasskeyAuthenticator during
+       Flutter's web bootstrap (before first frame) and calls window.close()
+       if it's missing, silently breaking app init. Must load before
+       flutter_bootstrap.js. See https://github.com/corbado/flutter-passkeys. -->
+  <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js" onerror="showLoadError('Passkeys SDK (bundle.js) failed to load.')"></script>
   <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Check Vercel build logs.')"></script>
 </body>
 </html>
