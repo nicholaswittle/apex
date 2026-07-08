@@ -10,6 +10,7 @@ import 'widgets/labor_cost_panel.dart';
 import 'widgets/csv_time_card_exporter.dart';
 import 'core/notification_service.dart';
 import 'core/profile_service.dart';
+import 'features/time_clock/time_clock_service.dart';
 import 'widgets/org_invite_panel.dart';
 import 'widgets/notification_bell.dart';
 
@@ -82,6 +83,7 @@ class _CalendarPageState extends State<CalendarPage> {
   final Map<String, String> _dayLabels = {};
 
   final _supabase = Supabase.instance.client;
+  late final TimeClockService _timeClock = TimeClockService(_supabase);
 
   bool get _isOwner => widget.userRole == 'Owner';
 
@@ -225,35 +227,25 @@ class _CalendarPageState extends State<CalendarPage> {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
     try {
-      final today = DateTime.now();
-      final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      final data = await _supabase
-          .from('time_entries')
-          .select('id, shift_id')
-          .eq('user_id', userId)
-          .gte('clock_in', '${dateStr}T00:00:00')
-          .isFilter('clock_out', null);
+      final active = await _timeClock.loadActiveEntriesForToday(userId);
       if (!mounted) return;
-      final rows = ((data as List?)?.cast<Map<String, dynamic>>()) ?? [];
-      setState(() {
-        _clockedInEntries = {for (final r in rows) r['shift_id'] as String: r['id'] as String};
-      });
+      setState(() => _clockedInEntries = active);
     } catch (e) {
-    if (!mounted) return;
-    _showBanner('Failed to load clock-in status: $e', UniversalTheme.alertRed);
-  }
+      if (!mounted) return;
+      _showBanner('Failed to load clock-in status: $e', UniversalTheme.alertRed);
+    }
   }
 
   Future<void> _clockIn(String shiftId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
     try {
-      final result = await _supabase.from('time_entries').insert({
-        'user_id': userId,
-        'user_name': widget.userName,
-        'shift_id': shiftId,
-      }).select('id').single();
-      setState(() => _clockedInEntries[shiftId] = result['id'] as String);
+      final entryId = await _timeClock.clockIn(
+        userId: userId,
+        userName: widget.userName,
+        shiftId: shiftId,
+      );
+      setState(() => _clockedInEntries[shiftId] = entryId);
     } catch (e) {
       _showBanner('Clock in failed: $e', UniversalTheme.alertRed);
     }
@@ -263,9 +255,7 @@ class _CalendarPageState extends State<CalendarPage> {
     final entryId = _clockedInEntries[shiftId];
     if (entryId == null) return;
     try {
-      await _supabase.from('time_entries')
-          .update({'clock_out': DateTime.now().toIso8601String()})
-          .eq('id', entryId);
+      await _timeClock.clockOut(entryId);
       setState(() => _clockedInEntries.remove(shiftId));
     } catch (e) {
       _showBanner('Clock out failed: $e', UniversalTheme.alertRed);
