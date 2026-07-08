@@ -72,6 +72,12 @@ class TimeOffService {
     return (unnotified as List).cast<Map<String, dynamic>>();
   }
 
+  /// Permanently removes a time-off request (e.g. owner clearing old
+  /// history). No soft-delete: callers should confirm with the user first.
+  Future<void> deleteRequest(String id) async {
+    await _client.from('time_off_requests').delete().eq('id', id);
+  }
+
   Future<void> markNotified(String requestId) async {
     await _client
         .from('time_off_requests')

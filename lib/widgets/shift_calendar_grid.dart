@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:apex/theme.dart';
 
-class ShiftCalendarGrid extends StatelessWidget {
+class ShiftCalendarGrid extends StatefulWidget {
   final DateTime selectedDate;
   final bool isFullMonthView;
   final VoidCallback onToggleMonthView;
@@ -21,6 +21,11 @@ class ShiftCalendarGrid extends StatelessWidget {
     required this.body,
   });
 
+  @override
+  State<ShiftCalendarGrid> createState() => _ShiftCalendarGridState();
+}
+
+class _ShiftCalendarGridState extends State<ShiftCalendarGrid> {
   static const List<String> _shortNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const List<String> _monthNames = [
     'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
@@ -28,6 +33,20 @@ class ShiftCalendarGrid extends StatelessWidget {
   ];
 
   static const double _swipeVelocityThreshold = 200;
+  static const Duration _slideDuration = Duration(milliseconds: 260);
+
+  /// +1 when the most recent navigation moved forward (next week/month),
+  /// -1 when it moved back. Drives which side the incoming content slides
+  /// in from.
+  int _direction = 1;
+
+  @override
+  void didUpdateWidget(ShiftCalendarGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
+      _direction = widget.selectedDate.isAfter(oldWidget.selectedDate) ? 1 : -1;
+    }
+  }
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -48,9 +67,9 @@ class ShiftCalendarGrid extends StatelessWidget {
   }
 
   Widget _buildDayTile(String dayName, DateTime date) {
-    final bool isSelected = _isSameDay(selectedDate, date);
+    final bool isSelected = _isSameDay(widget.selectedDate, date);
     return GestureDetector(
-      onTap: () => onDateSelected(date),
+      onTap: () => widget.onDateSelected(date),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
         decoration: BoxDecoration(
@@ -89,12 +108,13 @@ class ShiftCalendarGrid extends StatelessWidget {
 
   Widget _buildFullMonthGrid() {
     const List<String> weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final DateTime selectedDate = widget.selectedDate;
     final DateTime firstDay = DateTime(selectedDate.year, selectedDate.month, 1);
     final int totalDays = DateTime(selectedDate.year, selectedDate.month + 1, 0).day;
     final int weekdayOffset = firstDay.weekday - 1;
 
     return _swipeNavigator(
-      onSwipe: onChangeMonth,
+      onSwipe: widget.onChangeMonth,
       child: Container(
         color: UniversalTheme.lightCard,
         padding: const EdgeInsets.all(16),
@@ -108,7 +128,7 @@ class ShiftCalendarGrid extends StatelessWidget {
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
                 ),
                 TextButton.icon(
-                  onPressed: onToggleMonthView,
+                  onPressed: widget.onToggleMonthView,
                   icon: const Icon(Icons.view_week, size: 16, color: UniversalTheme.accent),
                   label: const Text('Week View', style: TextStyle(color: UniversalTheme.accent, fontSize: 12)),
                 ),
@@ -139,8 +159,8 @@ class ShiftCalendarGrid extends StatelessWidget {
                   final bool isSelected = _isSameDay(selectedDate, date);
                   return GestureDetector(
                     onTap: () {
-                      onDateSelected(date);
-                      onToggleMonthView();
+                      widget.onDateSelected(date);
+                      widget.onToggleMonthView();
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -170,12 +190,24 @@ class ShiftCalendarGrid extends StatelessWidget {
     );
   }
 
+  Widget _buildTransition(Widget child, Animation<double> animation) {
+    final offsetAnimation = Tween<Offset>(
+      begin: Offset(_direction.toDouble(), 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+    return ClipRect(
+      child: SlideTransition(position: offsetAnimation, child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final DateTime selectedDate = widget.selectedDate;
+    final bool isFullMonthView = widget.isFullMonthView;
     final int currentWeekday = selectedDate.weekday;
     final DateTime monday = selectedDate.subtract(Duration(days: currentWeekday - 1));
     final List<DateTime> weekDays = List.generate(7, (i) => monday.add(Duration(days: i)));
-    final onNavigate = isFullMonthView ? onChangeMonth : onChangeWeek;
+    final onNavigate = isFullMonthView ? widget.onChangeMonth : widget.onChangeWeek;
 
     return Column(
       children: [
@@ -192,7 +224,7 @@ class ShiftCalendarGrid extends StatelessWidget {
                     onPressed: () => onNavigate(-1),
                   ),
                   GestureDetector(
-                    onTap: onToggleMonthView,
+                    onTap: widget.onToggleMonthView,
                     child: Row(
                       children: [
                         Text(
@@ -218,7 +250,7 @@ class ShiftCalendarGrid extends StatelessWidget {
               ),
               if (!isFullMonthView)
                 _swipeNavigator(
-                  onSwipe: onChangeWeek,
+                  onSwipe: widget.onChangeWeek,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
@@ -234,12 +266,27 @@ class ShiftCalendarGrid extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: isFullMonthView
-              ? _buildFullMonthGrid()
-              : _swipeNavigator(
-                  onSwipe: onChangeWeek,
-                  child: body,
-                ),
+          child: AnimatedSwitcher(
+            duration: _slideDuration,
+            transitionBuilder: _buildTransition,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.topLeft,
+              children: [...previousChildren, if (currentChild != null) currentChild],
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(
+                isFullMonthView
+                    ? 'month-${selectedDate.year}-${selectedDate.month}'
+                    : 'week-${monday.year}-${monday.month}-${monday.day}',
+              ),
+              child: isFullMonthView
+                  ? _buildFullMonthGrid()
+                  : _swipeNavigator(
+                      onSwipe: widget.onChangeWeek,
+                      child: widget.body,
+                    ),
+            ),
+          ),
         ),
       ],
     );

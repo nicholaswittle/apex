@@ -415,6 +415,7 @@ class _CalendarPageState extends State<CalendarPage> {
             reload: _loadScheduleData,
           ),
           onUpdateStatus: (id, status) => _ctrl.updateVacationStatus(id, status, _loadScheduleData),
+          onDelete: (id) => _ctrl.deleteVacationRequest(id, _loadScheduleData),
         ),
         AdminPublishPanel(
           userName: widget.userName,

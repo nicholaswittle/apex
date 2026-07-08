@@ -621,6 +621,16 @@ class CalendarPageController {
     }
   }
 
+  Future<void> deleteVacationRequest(String id, Future<void> Function() reload) async {
+    try {
+      await timeOffService.deleteRequest(id);
+      showBanner('Request deleted', UniversalTheme.darkSlate);
+      await reload();
+    } catch (e) {
+      showBanner('Delete failed: $e', UniversalTheme.alertRed);
+    }
+  }
+
   void submitTimeOffRequest({
     required DateTimeRange? range,
     required List<dynamic> allRequests,

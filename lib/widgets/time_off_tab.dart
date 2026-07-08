@@ -13,6 +13,7 @@ class TimeOffTab extends StatelessWidget {
     required this.onMultiDayPick,
     required this.onSubmit,
     required this.onUpdateStatus,
+    required this.onDelete,
   });
 
   final List<Map<String, dynamic>> requests;
@@ -24,6 +25,7 @@ class TimeOffTab extends StatelessWidget {
   final VoidCallback onMultiDayPick;
   final VoidCallback onSubmit;
   final void Function(String id, String status) onUpdateStatus;
+  final void Function(String id) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -171,12 +173,36 @@ class TimeOffTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        _buildRequestHistory(),
+        _buildRequestHistory(context),
       ],
     );
   }
 
-  Widget _buildRequestHistory() {
+  Future<void> _confirmDelete(BuildContext context, Map<String, dynamic> req) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete time off request?'),
+        content: Text(
+          '${req['user_name']}: ${req['start_date']} to ${req['end_date']}. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: UniversalTheme.alertRed)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) onDelete(req['id'] as String);
+  }
+
+  Widget _buildRequestHistory(BuildContext context) {
     if (requests.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24.0),
@@ -216,21 +242,20 @@ class TimeOffTab extends StatelessWidget {
                 Text('Reason: ${req['reason']}', style: const TextStyle(fontSize: 12)),
               ],
             ),
-            trailing: isOwner && req['status'] == 'Pending'
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.check_circle, color: Colors.green),
-                        onPressed: () => onUpdateStatus(req['id'], 'Approved'),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.cancel, color: UniversalTheme.alertRed),
-                        onPressed: () => onUpdateStatus(req['id'], 'Denied'),
-                      ),
-                    ],
-                  )
-                : Container(
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isOwner && req['status'] == 'Pending') ...[
+                  IconButton(
+                    icon: const Icon(Icons.check_circle, color: Colors.green),
+                    onPressed: () => onUpdateStatus(req['id'], 'Approved'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.cancel, color: UniversalTheme.alertRed),
+                    onPressed: () => onUpdateStatus(req['id'], 'Denied'),
+                  ),
+                ] else
+                  Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.1),
@@ -245,6 +270,14 @@ class TimeOffTab extends StatelessWidget {
                       ),
                     ),
                   ),
+                if (isOwner)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                    tooltip: 'Delete request',
+                    onPressed: () => _confirmDelete(context, req),
+                  ),
+              ],
+            ),
           ),
         );
       }).toList(),
