@@ -2,6 +2,27 @@
 
 Use this to test audit fixes in the browser without a Mac or Android build.
 
+## Production URL
+
+**https://apex-scheduler.vercel.app**
+
+Vercel **Production Branch** must be `cursor/apex-store-launch-447c`.
+
+If the site shows the wrong app or `main.dart.js` 404s, the Vercel project is pointed at the wrong repo/branch — fix in Vercel → Settings → Git.
+
+## GitHub Actions deploy (optional)
+
+Workflow `.github/workflows/vercel-deploy.yml` deploys on push to the production branch.
+Add these **GitHub repository secrets**:
+
+| Secret | Source |
+|--------|--------|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key |
+| `VERCEL_TOKEN` | Vercel → Account → Tokens |
+| `VERCEL_ORG_ID` | Vercel project settings |
+| `VERCEL_PROJECT_ID` | Vercel project settings |
+
 ## 1. Vercel project setup
 
 1. Import the GitHub repo at [vercel.com](https://vercel.com)
@@ -27,8 +48,10 @@ In Supabase Dashboard → **Authentication** → **URL Configuration**:
 
 | Field | Value |
 |-------|--------|
-| **Site URL** | `https://your-app.vercel.app` |
-| **Redirect URLs** | `https://your-app.vercel.app/**` and `http://localhost:**` |
+| **Site URL** | `https://apex-scheduler.vercel.app` |
+| **Redirect URLs** | `https://apex-scheduler.vercel.app/**`, `https://*.vercel.app/**`, `http://localhost:**` |
+
+These are configured on Supabase project `pqkremkwfkudrhtxasdj` (July 2026).
 
 Without this, login may fail on the deployed domain.
 
