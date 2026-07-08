@@ -1,11 +1,10 @@
 import 'package:apex/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TimeOffTab extends StatelessWidget {
   const TimeOffTab({
     super.key,
-    required this.supabase,
+    required this.requests,
     required this.isOwner,
     required this.isSyncing,
     required this.temporarySelectedRange,
@@ -16,7 +15,7 @@ class TimeOffTab extends StatelessWidget {
     required this.onUpdateStatus,
   });
 
-  final SupabaseClient supabase;
+  final List<Map<String, dynamic>> requests;
   final bool isOwner;
   final bool isSyncing;
   final DateTimeRange? temporarySelectedRange;
@@ -172,89 +171,83 @@ class TimeOffTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: supabase
-              .from('time_off_requests')
-              .stream(primaryKey: ['id'])
-              .order('created_at', ascending: false),
-          builder: (context, snapshot) {
-            final requests = snapshot.data ?? [];
+        _buildRequestHistory(),
+      ],
+    );
+  }
 
-            if (requests.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24.0),
-                child: Center(
-                  child: Text(
-                    'No active vacation request history found.',
-                    style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+  Widget _buildRequestHistory() {
+    if (requests.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: Text(
+            'No active vacation request history found.',
+            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: requests.map((req) {
+        Color statusColor = Colors.orange;
+        if (req['status'] == 'Approved') statusColor = Colors.green;
+        if (req['status'] == 'Denied') statusColor = UniversalTheme.alertRed;
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          child: ListTile(
+            title: Text(
+              '${req['start_date']} to ${req['end_date']}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Staff: ${req['user_name']}',
+                  style: const TextStyle(
+                    color: Colors.brown,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
                   ),
                 ),
-              );
-            }
-
-            return Column(
-              children: requests.map((req) {
-                Color statusColor = Colors.orange;
-                if (req['status'] == 'Approved') statusColor = Colors.green;
-                if (req['status'] == 'Denied') statusColor = UniversalTheme.alertRed;
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: ListTile(
-                    title: Text(
-                      '${req['start_date']} to ${req['end_date']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                Text('Reason: ${req['reason']}', style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+            trailing: isOwner && req['status'] == 'Pending'
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.check_circle, color: Colors.green),
+                        onPressed: () => onUpdateStatus(req['id'], 'Approved'),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel, color: UniversalTheme.alertRed),
+                        onPressed: () => onUpdateStatus(req['id'], 'Denied'),
+                      ),
+                    ],
+                  )
+                : Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Staff: ${req['user_name']}',
-                          style: const TextStyle(
-                            color: Colors.brown,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                        Text('Reason: ${req['reason']}', style: const TextStyle(fontSize: 12)),
-                      ],
+                    child: Text(
+                      req['status'] ?? 'Pending',
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
-                    trailing: isOwner && req['status'] == 'Pending'
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.check_circle, color: Colors.green),
-                                onPressed: () => onUpdateStatus(req['id'], 'Approved'),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.cancel, color: UniversalTheme.alertRed),
-                                onPressed: () => onUpdateStatus(req['id'], 'Denied'),
-                              ),
-                            ],
-                          )
-                        : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              req['status'] ?? 'Pending',
-                              style: TextStyle(
-                                color: statusColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
                   ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-      ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

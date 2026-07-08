@@ -20,6 +20,7 @@ import 'package:apex/widgets/smart_suggestions_panel.dart';
 import 'package:apex/widgets/tutorial_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
 class CalendarPage extends StatefulWidget {
   final String userEmail;
@@ -44,7 +45,7 @@ class _CalendarPageState extends State<CalendarPage> {
   bool _isPublishing = false;
   bool _isAddingSidework = false;
   List<dynamic> _allRequests = [];
-  bool _hasCheckedNotifications = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _timeOffSubscription;
   DateTimeRange? _temporarySelectedRange;
   late DateTime _selectedDate;
   bool _isFullMonthView = false;
@@ -94,6 +95,42 @@ class _CalendarPageState extends State<CalendarPage> {
     _adminTargetWeekAnchor = DateTime.now();
     AnalyticsService.instance.trackStaffOpen();
     _listenToNewShifts();
+    _listenToTimeOffRequests();
+  }
+
+  void _listenToTimeOffRequests() {
+    _timeOffSubscription?.cancel();
+    _timeOffSubscription = _services.timeOffService.watchRequests().listen(
+      (requests) {
+        if (!mounted) return;
+        setState(() => _allRequests = requests);
+        _handleTimeOffUpdates(requests);
+      },
+      onError: (_) {},
+    );
+  }
+
+  Future<void> _handleTimeOffUpdates(List<Map<String, dynamic>> requests) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    for (final request in requests) {
+      if (request['user_id'] != userId) continue;
+      final status = request['status']?.toString();
+      if (status != 'Approved' && status != 'Denied') continue;
+      if (request['notified'] == true) continue;
+
+      if (mounted) {
+        _ctrl.showNotificationOverlay(
+          'Schedule Notice: Your request from ${request['start_date']} to ${request['end_date']} was marked [$status].',
+        );
+      }
+      await _services.timeOffService.markNotified(request['id'] as String);
+    }
+
+    if (_staffNames.isNotEmpty && mounted) {
+      await _loadAvailabilityForDate(_selectedDate);
+    }
   }
 
   @override
@@ -138,6 +175,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   void dispose() {
+    _timeOffSubscription?.cancel();
     _sideWorkController.dispose();
     _timeOffReasonController.dispose();
     _adminShiftTitleController.dispose();
@@ -275,9 +313,8 @@ class _CalendarPageState extends State<CalendarPage> {
     if (data != null && mounted) setState(() => _allRequests = data);
     if (mounted) {
       await _ctrl.checkFirstTimeStatus();
-      await _ctrl.checkForApprovalNotifications(
-        hasChecked: _hasCheckedNotifications,
-        setChecked: (v) => _hasCheckedNotifications = v,
+      await _handleTimeOffUpdates(
+        _allRequests.cast<Map<String, dynamic>>(),
       );
     }
   }
@@ -347,7 +384,7 @@ class _CalendarPageState extends State<CalendarPage> {
           onAdminAction: _ctrl.processAdminSwapAction,
         ),
         TimeOffTab(
-          supabase: _supabase,
+          requests: _allRequests.cast<Map<String, dynamic>>(),
           isOwner: _isOwner,
           isSyncing: _isSyncing,
           temporarySelectedRange: _temporarySelectedRange,

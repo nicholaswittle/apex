@@ -11,6 +11,7 @@ Remote migrations applied to the Apex Supabase project:
 | `launch_complete_features` | Sidework completion, notifications table, invite RPC, push notify RPC, Stripe webhook RPC |
 | `user_id_backfill` | `shifts.user_id` column + backfill from profiles (applied 20260708194039) |
 | `apex_create_organization` | `apex_create_organization()` RPC for multi-business owner signup |
+| `time_off_realtime` | Realtime on `time_off_requests` + `notifications` for live status updates |
 
 Edge functions deployed:
 
