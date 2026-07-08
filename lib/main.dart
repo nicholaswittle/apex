@@ -87,12 +87,14 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
+  int _authRevision = 0;
+
   @override
   void initState() {
     super.initState();
     if (!AppConfig.hasSupabase) return;
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _authRevision++);
     });
   }
 
@@ -108,6 +110,7 @@ class _AuthGateState extends State<_AuthGate> {
     }
 
     return FutureBuilder(
+      key: ValueKey('profile-$_authRevision-${session.user.id}'),
       future: ProfileService.loadCurrentProfile(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {

@@ -43,14 +43,21 @@ class _SetupPageState extends State<SetupPage> {
     setState(() => _isLoading = true);
 
     try {
-      await _supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'name': name,
-          'bootstrap_owner': true,
-        },
-      );
+      try {
+        await _supabase.auth.signUp(
+          email: email,
+          password: password,
+          data: {
+            'name': name,
+            'bootstrap_owner': true,
+          },
+        );
+      } on AuthException catch (error) {
+        if (error.code != 'user_already_exists' &&
+            !error.message.toLowerCase().contains('already registered')) {
+          rethrow;
+        }
+      }
 
       await _supabase.auth.signInWithPassword(
         email: email,
@@ -77,7 +84,10 @@ class _SetupPageState extends State<SetupPage> {
         ),
       );
     } catch (e) {
-      _showSnackBar('Setup failed. Please try again.', UniversalTheme.alertRed);
+      final message = e is AuthException
+          ? 'Setup failed: ${e.message}'
+          : 'Setup failed. Please try again.';
+      _showSnackBar(message, UniversalTheme.alertRed);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
