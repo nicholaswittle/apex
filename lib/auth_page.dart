@@ -18,6 +18,7 @@ class _AuthPageState extends State<AuthPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _businessNameController = TextEditingController();
   final _inviteCodeController = TextEditingController();
 
   bool _isSignUp = false;
@@ -51,6 +52,7 @@ class _AuthPageState extends State<AuthPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _businessNameController.dispose();
     _inviteCodeController.dispose();
     super.dispose();
   }
@@ -123,10 +125,16 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
+  Future<void> _createBusinessIfNeeded(String businessName) async {
+    if (businessName.isEmpty || _needsOwnerSetup) return;
+    await ProfileService.createOrganization(businessName);
+  }
+
   Future<void> _handleSubmit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final name = _nameController.text.trim();
+    final businessName = _businessNameController.text.trim();
     final inviteCode = _inviteCodeController.text.trim().toUpperCase();
 
     if (email.isEmpty || password.isEmpty || (_isSignUp && name.isEmpty)) {
@@ -134,8 +142,13 @@ class _AuthPageState extends State<AuthPage> {
       return;
     }
 
-    if (_isSignUp && !_needsOwnerSetup && inviteCode.isEmpty) {
-      _showBanner('Enter your organization invite code to register.', UniversalTheme.alertRed);
+    if (_isSignUp && !_needsOwnerSetup && inviteCode.isEmpty && businessName.isEmpty) {
+      _showBanner('Add a business name (create) or invite code (join a team).', UniversalTheme.alertRed);
+      return;
+    }
+
+    if (_isSignUp && !_needsOwnerSetup && inviteCode.isNotEmpty && businessName.isNotEmpty) {
+      _showBanner('Use either a business name or invite code, not both.', UniversalTheme.alertRed);
       return;
     }
 
@@ -190,13 +203,19 @@ class _AuthPageState extends State<AuthPage> {
       );
 
       try {
-        await _redeemInviteIfNeeded(inviteCode);
+        if (businessName.isNotEmpty) {
+          await _createBusinessIfNeeded(businessName);
+        } else {
+          await _redeemInviteIfNeeded(inviteCode);
+        }
       } catch (e) {
         if (signupJustSucceeded) {
           final profile = await ProfileService.loadCurrentProfile();
           if (profile != null && mounted) {
             _showBanner(
-              'Account created and signed in. If shifts look wrong, ask your manager for a new invite code.',
+              businessName.isNotEmpty
+                  ? 'Account created. If your business did not appear, sign in and try again.'
+                  : 'Account created and signed in. If shifts look wrong, ask your manager for a new invite code.',
               UniversalTheme.darkSlate,
             );
             await _navigateToCalendar();
@@ -286,6 +305,15 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    TextField(
+                      controller: _businessNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Business Name (for owner signup)',
+                        hintText: 'Create a new business — leave blank if using invite code',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                   if (!_needsOwnerSetup)
                     TextField(
@@ -294,7 +322,7 @@ class _AuthPageState extends State<AuthPage> {
                       decoration: InputDecoration(
                         labelText: 'Organization Invite Code',
                         hintText: _isSignUp
-                            ? 'Required for staff registration'
+                            ? 'Required to join an existing team'
                             : 'Optional — use to join your team',
                         border: const OutlineInputBorder(),
                       ),

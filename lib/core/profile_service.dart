@@ -38,4 +38,11 @@ class ProfileService {
       'invite_code': inviteCode.trim().toUpperCase(),
     });
   }
+
+  static Future<String> createOrganization(String businessName) async {
+    final result = await _client.rpc('apex_create_organization', params: {
+      'business_name': businessName.trim(),
+    });
+    return result?.toString() ?? '';
+  }
 }

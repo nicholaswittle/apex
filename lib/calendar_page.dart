@@ -498,6 +498,10 @@ class _CalendarPageState extends State<CalendarPage> {
             _currentIndex = index;
             if (index != 3 && _isOwner && _showTutorial) _dismissTutorial();
           });
+          if (index == 0) {
+            _syncDataCore();
+            _loadAvailabilityForDate(_selectedDate);
+          }
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
