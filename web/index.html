@@ -17,16 +17,30 @@
     Loading Apex Scheduler…
   </div>
   <script>
-    window.addEventListener('error', function (event) {
+    function showLoadError(msg) {
       var el = document.getElementById('loading');
       if (el) {
         el.style.color = '#991B1B';
         el.style.padding = '24px';
         el.style.textAlign = 'center';
-        el.textContent = 'Failed to load app: ' + (event.message || 'unknown error');
+        el.style.maxWidth = '420px';
+        el.style.margin = '0 auto';
+        el.style.lineHeight = '1.5';
+        el.textContent = msg;
       }
+    }
+    window.addEventListener('error', function (event) {
+      showLoadError('Failed to load app: ' + (event.message || 'unknown error'));
     });
+    setTimeout(function () {
+      var el = document.getElementById('loading');
+      if (el && el.textContent.indexOf('Loading Apex Scheduler') !== -1) {
+        showLoadError(
+          'App scripts did not load. Usually: Vercel env vars missing (SUPABASE_URL, SUPABASE_ANON_KEY) or deploy did not build Flutter web. Redeploy after setting env vars.'
+        );
+      }
+    }, 20000);
   </script>
-  <script src="flutter_bootstrap.js"></script>
+  <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Redeploy from branch cursor/apex-store-launch-447c with env vars set.')"></script>
 </body>
 </html>
