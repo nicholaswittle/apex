@@ -1,15 +1,15 @@
+import 'package:apex/auth_page.dart';
+import 'package:apex/calendar_page.dart';
+import 'package:apex/core/analytics_service.dart';
+import 'package:apex/core/app_config.dart';
+import 'package:apex/core/error_monitoring.dart';
+import 'package:apex/core/firebase_bootstrap.dart';
+import 'package:apex/core/profile_service.dart';
+import 'package:apex/widgets/config_missing_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'auth_page.dart';
-import 'calendar_page.dart';
-import 'core/app_config.dart';
-import 'core/firebase_bootstrap.dart';
-import 'core/profile_service.dart';
-import 'widgets/config_missing_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
+Future<void> _bootstrapApp() async {
   try {
     if (AppConfig.hasSupabase) {
       await Supabase.initialize(
@@ -23,12 +23,18 @@ void main() async {
     }
 
     await FirebaseBootstrap.initialize();
+    AnalyticsService.instance.logEvent('app_start');
     runApp(const MyApp());
   } catch (error, stackTrace) {
     debugPrint('Startup failed: $error');
     debugPrint('$stackTrace');
     runApp(_StartupErrorApp(message: error.toString()));
   }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initErrorMonitoring(appRunner: _bootstrapApp);
 }
 
 class MyApp extends StatelessWidget {
