@@ -29,18 +29,24 @@
         el.textContent = msg;
       }
     }
+    function hideLoading() {
+      var el = document.getElementById('loading');
+      if (el) el.remove();
+    }
+    // Flutter removes this overlay when the first frame renders.
+    window.addEventListener('flutter-first-frame', hideLoading);
     window.addEventListener('error', function (event) {
       showLoadError('Failed to load app: ' + (event.message || 'unknown error'));
     });
     setTimeout(function () {
       var el = document.getElementById('loading');
-      if (el && el.textContent.indexOf('Loading Apex Scheduler') !== -1) {
+      if (el) {
         showLoadError(
-          'App scripts did not load. Usually: Vercel env vars missing (SUPABASE_URL, SUPABASE_ANON_KEY) or deploy did not build Flutter web. Redeploy after setting env vars.'
+          'Still loading after 30s. Try hard refresh. If on a preview URL, use Production: apex-scheduler-theta.vercel.app'
         );
       }
-    }, 20000);
+    }, 30000);
   </script>
-  <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Redeploy from branch cursor/apex-store-launch-447c with env vars set.')"></script>
+  <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Redeploy production branch cursor/apex-store-launch-447c.')"></script>
 </body>
 </html>

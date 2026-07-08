@@ -2,13 +2,19 @@
 
 Use this to test audit fixes in the browser without a Mac or Android build.
 
-## Production URL
+## Production URL (use this one)
 
-**https://apex-scheduler.vercel.app**
+**https://apex-scheduler-theta.vercel.app**
 
-Vercel **Production Branch** must be `cursor/apex-store-launch-447c`.
+Do **not** use `apex-scheduler.vercel.app` — that domain points to a different old project ("Apex Radar") without the Flutter build.
 
-If the site shows the wrong app or `main.dart.js` 404s, the Vercel project is pointed at the wrong repo/branch — fix in Vercel → Settings → Git.
+| URL | Status |
+|-----|--------|
+| `apex-scheduler-theta.vercel.app` | ✅ Apex Scheduler (correct) |
+| `apex-scheduler.vercel.app` | ❌ Wrong project — JS 404 |
+| `*-wi-sense-llc.vercel.app` previews | ⚠️ May have Deployment Protection — use theta instead |
+
+**One branch, one deploy:** push to `cursor/apex-store-launch-447c` → Vercel auto-builds production (~3–5 min).
 
 ## GitHub Actions deploy (optional)
 
