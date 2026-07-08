@@ -8,7 +8,8 @@ Remote migrations applied to the Apex Supabase project:
 | `launch_blockers_rls_and_auth` | RLS hardening, owner bootstrap, subscription protection |
 | `launch_blockers_rls_hotfix` | Staff shift update policy, subscription RPC trigger bypass |
 | `launch_blockers_owner_check_rpc` | `apex_has_owner()` for setup flow |
-| `20260708194039` | `user_id_backfill` | `shifts.user_id` column + backfill from profiles (applied) |
+| `launch_complete_features` | Sidework completion, notifications table, invite RPC, push notify RPC, Stripe webhook RPC |
+| `user_id_backfill` | `shifts.user_id` column + backfill from profiles (applied 20260708194039) |
 
 Edge functions deployed:
 
