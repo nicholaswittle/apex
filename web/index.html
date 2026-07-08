@@ -12,7 +12,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="manifest" href="manifest.json">
 </head>
-<body>
-  <script src="flutter_bootstrap.js" async></script>
+<body style="margin:0;background:#F9F6F0;">
+  <div id="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'Noto Sans',sans-serif;color:#3E1F13;">
+    Loading Apex Scheduler…
+  </div>
+  <script>
+    window.addEventListener('error', function (event) {
+      var el = document.getElementById('loading');
+      if (el) {
+        el.style.color = '#991B1B';
+        el.style.padding = '24px';
+        el.style.textAlign = 'center';
+        el.textContent = 'Failed to load app: ' + (event.message || 'unknown error');
+      }
+    });
+  </script>
+  <script src="flutter_bootstrap.js"></script>
 </body>
 </html>

@@ -27,6 +27,16 @@ flutter pub get
 ./scripts/build_web.sh             # web build for Vercel or local preview
 ```
 
+## Gate 0 & roadmap
+
+**Current phase:** stabilize Jigsy's pilot before new features.
+
+| Doc | Purpose |
+|-----|---------|
+| **[docs/GATE0.md](docs/GATE0.md)** | Active checklist — merge, 7-day clean run, exit criteria |
+| **[docs/JIGSYS_BASELINE.md](docs/JIGSYS_BASELINE.md)** | Baseline metrics (fill with owner by Day 3) |
+| **[docs/ROADMAP.md](docs/ROADMAP.md)** | Full plan — Pillars 0–E, timeline, kill list |
+
 ## Test on Vercel (web)
 
 See **[docs/VERCEL.md](docs/VERCEL.md)** — deploy the Flutter web build with `SUPABASE_URL` and `SUPABASE_ANON_KEY` env vars.
