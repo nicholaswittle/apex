@@ -14,20 +14,20 @@ Do **not** use `apex-scheduler.vercel.app` — that domain points to a different
 | `apex-scheduler.vercel.app` | ❌ Wrong project — JS 404 |
 | `*-wi-sense-llc.vercel.app` previews | ⚠️ May have Deployment Protection — use theta instead |
 
-**One branch, one deploy:** push to `cursor/apex-store-launch-447c` → Vercel auto-builds production (~3–5 min).
+Deploys use **Vercel Git integration** (no GitHub Actions workflow). Pushes to the configured **Production Branch** auto-build production (~3–5 min).
 
-## GitHub Actions deploy (optional)
+### Production still says "created 1 day ago"
 
-Workflow `.github/workflows/vercel-deploy.yml` deploys on push to the production branch.
-Add these **GitHub repository secrets**:
+Vercel only updates **Production** when you push to the branch set under **Settings → Git → Production Branch**. If that branch is still `cursor/apex-vercel-web-447c`, pushes to `cursor/apex-store-launch-447c` only create **Preview** deployments (newer timestamp, different URL).
 
-| Secret | Source |
-|--------|--------|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anon key |
-| `VERCEL_TOKEN` | Vercel → Account → Tokens |
-| `VERCEL_ORG_ID` | Vercel project settings |
-| `VERCEL_PROJECT_ID` | Vercel project settings |
+**Fix (do both):**
+
+1. Vercel → **apex-scheduler** project → **Settings → Git → Production Branch** → set to `cursor/apex-store-launch-447c` → **Save**.
+2. **Deployments** tab → find the latest **Ready** deploy from `cursor/apex-store-launch-447c` (commit `0eb8079` or newer) → **⋯ → Promote to Production**.
+
+Or push to whichever branch Production Branch is set to — both `cursor/apex-store-launch-447c` and `cursor/apex-vercel-web-447c` are kept in sync with the same code.
+
+After a successful build, Production should show **minutes ago**, not days.
 
 ## 1. Vercel project setup
 
@@ -89,6 +89,14 @@ python3 -m http.server 8080 --directory build/web
 | Billing | Deferred (coming soon) |
 
 ## 6. Troubleshooting
+
+### Production deployment timestamp not updating
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Production shows old branch (`apex-vercel-web-447c`) | Wrong Production Branch in Vercel Git settings | Change to `cursor/apex-store-launch-447c` and Promote latest Ready deploy |
+| New deploys only appear under Preview | Push went to non-production branch | Promote preview, or push to the configured Production Branch |
+| Build succeeds but site unchanged | Old Production still assigned | **Promote to Production** on the new Ready deployment |
 
 ### F12 console: manifest.json CORS / vercel.com/sso-api redirect
 
