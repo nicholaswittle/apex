@@ -11,42 +11,87 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="manifest" href="manifest.json">
+  <style>
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Noto Sans', sans-serif;
+      color: #3E1F13;
+      background: #F9F6F0;
+      z-index: 9999;
+      transition: opacity 0.2s ease;
+    }
+    #loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
 </head>
 <body style="margin:0;background:#F9F6F0;">
-  <div id="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'Noto Sans',sans-serif;color:#3E1F13;">
-    Loading Apex Scheduler…
-  </div>
+  <div id="loading">Loading Apex Scheduler…</div>
   <script>
+    // Clear stale service workers that can block updated main.dart.js on mobile.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      });
+    }
+
     function showLoadError(msg) {
       var el = document.getElementById('loading');
-      if (el) {
-        el.style.color = '#991B1B';
-        el.style.padding = '24px';
-        el.style.textAlign = 'center';
-        el.style.maxWidth = '420px';
-        el.style.margin = '0 auto';
-        el.style.lineHeight = '1.5';
-        el.textContent = msg;
-      }
+      if (!el) return;
+      el.classList.remove('hidden');
+      el.style.color = '#991B1B';
+      el.style.padding = '24px';
+      el.style.textAlign = 'center';
+      el.style.maxWidth = '420px';
+      el.style.margin = '0 auto';
+      el.style.lineHeight = '1.5';
+      el.textContent = msg;
     }
+
     function hideLoading() {
       var el = document.getElementById('loading');
-      if (el) el.remove();
+      if (!el || el.dataset.done === '1') return;
+      el.dataset.done = '1';
+      el.classList.add('hidden');
+      setTimeout(function () { el.remove(); }, 300);
     }
-    // Flutter removes this overlay when the first frame renders.
+
     window.addEventListener('flutter-first-frame', hideLoading);
+
     window.addEventListener('error', function (event) {
       showLoadError('Failed to load app: ' + (event.message || 'unknown error'));
     });
+
+    // Fallback: hide once Flutter mounts DOM (mobile Safari often skips flutter-first-frame).
+    var pollAttempts = 0;
+    var pollTimer = setInterval(function () {
+      pollAttempts++;
+      var flutterMounted = document.querySelector('flt-glass-pane, flutter-view, canvas');
+      if (flutterMounted) {
+        hideLoading();
+        clearInterval(pollTimer);
+      } else if (pollAttempts >= 120) {
+        clearInterval(pollTimer);
+        showLoadError(
+          'Still loading after 60s. Pull down to refresh or clear browser cache, then reopen.'
+        );
+      }
+    }, 500);
+
     setTimeout(function () {
       var el = document.getElementById('loading');
-      if (el) {
+      if (el && el.dataset.done !== '1') {
         showLoadError(
-          'Still loading after 30s. Try hard refresh. If on a preview URL, use Production: apex-scheduler-theta.vercel.app'
+          'Still loading after 30s. Pull down to refresh. URL: apex-scheduler-theta.vercel.app'
         );
       }
     }, 30000);
   </script>
-  <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Redeploy production branch cursor/apex-store-launch-447c.')"></script>
+  <script src="flutter_bootstrap.js" onerror="showLoadError('flutter_bootstrap.js failed to load (404). Check Vercel build logs.')"></script>
 </body>
 </html>
