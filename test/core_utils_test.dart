@@ -22,5 +22,19 @@ void main() {
     test('computes overnight shift', () {
       expect(calculateShiftHours('10:00 PM', '2:00 AM'), closeTo(4.0, 0.01));
     });
+
+    test('noon and midnight parse per AM/PM convention', () {
+      expect(calculateShiftHours('12:00 PM', '5:00 PM'), closeTo(5.0, 0.01));
+      expect(calculateShiftHours('12:00 AM', '8:00 AM'), closeTo(8.0, 0.01));
+    });
+
+    test('malformed input yields zero hours, never fabricated hours', () {
+      // A garbled start must not be treated as midnight (which would
+      // fabricate a 17-hour shift here and inflate labor cost).
+      expect(calculateShiftHours('', '5:00 PM'), 0.0);
+      expect(calculateShiftHours('17:00', '5:00 PM'), 0.0); // 24h format unsupported
+      expect(calculateShiftHours('10:00 AM', 'garbage'), 0.0);
+      expect(calculateShiftHours('', ''), 0.0);
+    });
   });
 }
