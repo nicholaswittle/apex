@@ -1,5 +1,6 @@
 import 'package:apex/core/date_utils.dart';
 import 'package:apex/core/notification_service.dart';
+import 'package:apex/core/profile_session.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SwapService {
@@ -7,17 +8,31 @@ class SwapService {
 
   final SupabaseClient _client;
 
+  Future<String> _currentOrgId() async {
+    final myId = _client.auth.currentUser?.id;
+    if (myId == null) return defaultOrganizationId;
+    final mine = await _client
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', myId)
+        .maybeSingle();
+    return mine?['organization_id'] as String? ?? defaultOrganizationId;
+  }
+
   Future<void> postSwap({
     required String shiftTitle,
     required String originalStaff,
     required DateTime selectedDate,
   }) async {
+    // Stamp the caller's org so the row satisfies the swaps RLS WITH CHECK
+    // (the column default only covers the first venue).
     await _client.from('swaps').insert({
       'shift_title': shiftTitle,
       'original_staff': originalStaff,
       'shift_date': dateKey(selectedDate),
       'day_num': selectedDate.day,
       'status': 'Available',
+      'organization_id': await _currentOrgId(),
     });
   }
 

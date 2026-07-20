@@ -4,6 +4,7 @@ Remote migrations applied to the Apex Supabase project:
 
 | Migration | Description |
 |-----------|-------------|
+| `20260720000000_launch_blockers_rls` | **Vendored 2026-07-20.** Per-org RLS isolation (profiles/shifts/swaps/time_entries/time_off_requests/notifications), `apex_current_org()` helper, partial unique index for atomic clock-in. Adds `organization_id` to `swaps`. ⚠️ Apply to **staging first** — RLS is default-deny. |
 | `launch_blockers_foundation` | `shift_date` / `task_date`, swap claim columns, day sync triggers |
 | `launch_blockers_rls_and_auth` | RLS hardening, owner bootstrap, subscription protection |
 | `launch_blockers_rls_hotfix` | Staff shift update policy, subscription RPC trigger bypass |
