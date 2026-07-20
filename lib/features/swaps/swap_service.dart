@@ -46,7 +46,19 @@ class SwapService {
     required String shiftId,
     required String userName,
   }) async {
-    await _client.from('shifts').update({'staff': userName}).eq('id', shiftId);
+    // Guard against the claim race: only take the shift if it is still 'Open'.
+    // Without the staff='Open' predicate two claimers both succeed (last write
+    // wins) and one silently loses their shift. select() lets us detect whether
+    // our update actually matched a row.
+    final claimed = await _client
+        .from('shifts')
+        .update({'staff': userName})
+        .eq('id', shiftId)
+        .eq('staff', 'Open')
+        .select('id');
+    if ((claimed as List).isEmpty) {
+      throw StateError('That shift was just claimed by someone else.');
+    }
   }
 
   Future<void> processAdminAction({
