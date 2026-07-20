@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:apex/theme.dart';
 import 'core/push_notification_service.dart';
-import 'core/profile_session.dart';
+import 'core/profile_service.dart';
+import 'core/app_config.dart';
 import 'calendar_page.dart';
+import 'setup_page.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -16,90 +18,249 @@ class _AuthPageState extends State<AuthPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  
+  final _businessNameController = TextEditingController();
+  final _inviteCodeController = TextEditingController();
+
   bool _isSignUp = false;
   bool _isLoading = false;
-  final _supabase = Supabase.instance.client;
+  bool _needsOwnerSetup = false;
+
+  SupabaseClient get _supabase => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AppConfig.hasSupabase) {
+      _checkOwnerSetup();
+    }
+  }
+
+  Future<void> _checkOwnerSetup() async {
+    if (!mounted) return;
+    try {
+      final hasOwner = await ProfileService.hasOwnerAccount();
+      if (!mounted) return;
+      setState(() => _needsOwnerSetup = !hasOwner);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _needsOwnerSetup = false);
+    }
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _businessNameController.dispose();
+    _inviteCodeController.dispose();
     super.dispose();
   }
 
   void _showBanner(String msg, Color bg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: bg));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: bg),
+    );
+  }
+
+  Future<void> _navigateToCalendar() async {
+    final profile = await ProfileService.loadCurrentProfile();
+    if (profile == null || !mounted) {
+      _showBanner('Profile not found. Contact your manager.', UniversalTheme.alertRed);
+      return;
+    }
+
+    await PushNotificationService.syncTokenForCurrentUser();
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CalendarPage(
+          userEmail: profile.email,
+          userName: profile.name,
+          userRole: profile.role,
+        ),
+      ),
+    );
+  }
+
+  String _authErrorMessage(Object error) {
+    if (error is AuthException) {
+      if (error.code == 'user_already_exists' ||
+          error.message.toLowerCase().contains('already registered')) {
+        return 'This email is already registered. Sign in with your password below.';
+      }
+      if (error.code == 'invalid_credentials') {
+        return 'Incorrect email or password.';
+      }
+      if (error.code == 'email_not_confirmed') {
+        return 'Check your email to confirm your account, then sign in.';
+      }
+    }
+
+    final text = error.toString().toLowerCase();
+    if (text.contains('invite code is invalid')) {
+      return 'That invite code is invalid. Ask your manager for a new one.';
+    }
+    if (text.contains('already been used')) {
+      return 'That invite code has already been used. Try signing in — your account may already exist.';
+    }
+    if (text.contains('expired')) {
+      return 'That invite code has expired. Ask your manager for a new one.';
+    }
+
+    return 'Authentication failed. Check your credentials and try again.';
+  }
+
+  Future<void> _redeemInviteIfNeeded(String inviteCode) async {
+    if (inviteCode.isEmpty || _needsOwnerSetup) return;
+
+    try {
+      await ProfileService.redeemInvite(inviteCode);
+    } catch (error) {
+      final text = error.toString().toLowerCase();
+      if (text.contains('already been used')) return;
+      rethrow;
+    }
+  }
+
+  Future<void> _createBusinessIfNeeded(String businessName) async {
+    if (businessName.isEmpty || _needsOwnerSetup) return;
+    await ProfileService.createOrganization(businessName);
   }
 
   Future<void> _handleSubmit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final name = _nameController.text.trim();
+    final businessName = _businessNameController.text.trim();
+    final inviteCode = _inviteCodeController.text.trim().toUpperCase();
 
     if (email.isEmpty || password.isEmpty || (_isSignUp && name.isEmpty)) {
       _showBanner('Please fill out all visible input options.', UniversalTheme.alertRed);
       return;
     }
 
+    if (_isSignUp && !_needsOwnerSetup && inviteCode.isEmpty && businessName.isEmpty) {
+      _showBanner('Add a business name (create) or invite code (join a team).', UniversalTheme.alertRed);
+      return;
+    }
+
+    if (_isSignUp && !_needsOwnerSetup && inviteCode.isNotEmpty && businessName.isNotEmpty) {
+      _showBanner('Use either a business name or invite code, not both.', UniversalTheme.alertRed);
+      return;
+    }
+
     setState(() => _isLoading = true);
+
+    var treatAsSignIn = !_isSignUp;
+    var signupJustSucceeded = false;
 
     try {
       if (_isSignUp) {
-        final response = await _supabase.auth.signUp(
-          email: email,
-          password: password,
-          data: {
-            'name': name,
-            'role': 'Staff',
-          },
-        );
+        final metadata = <String, dynamic>{
+          'name': name,
+          if (_needsOwnerSetup) 'bootstrap_owner': true,
+          if (inviteCode.isNotEmpty) 'invite_code': inviteCode,
+        };
 
-        if (response.user != null) {
-          await _supabase.from('profiles').insert({
-            'id': response.user!.id,
-            'email': email,
-            'name': name,
-            'role': 'Staff',
-            'first_time_login': true,
-          });
+        try {
+          final response = await _supabase.auth.signUp(
+            email: email,
+            password: password,
+            data: metadata,
+          );
 
+          if (response.session == null && response.user != null) {
+            _showBanner(
+              'Account created! Check your email to confirm, then sign in with your invite code.',
+              Colors.green,
+            );
+            if (mounted) setState(() => _isSignUp = false);
+            return;
+          }
+
+          signupJustSucceeded = true;
           _showBanner('Registration successful! Logging you in...', Colors.green);
+        } on AuthException catch (error) {
+          if (error.code == 'user_already_exists' ||
+              error.message.toLowerCase().contains('already registered')) {
+            treatAsSignIn = true;
+            _showBanner(
+              'Account already exists. Signing you in...',
+              UniversalTheme.darkSlate,
+            );
+          } else {
+            rethrow;
+          }
         }
       }
 
-      final authResponse = await _supabase.auth.signInWithPassword(
+      await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
 
-      if (authResponse.session != null && mounted) {
-        final profile = await ProfileSession.loadForUserId(authResponse.user!.id);
-
-        await PushNotificationService.syncTokenForCurrentUser();
-
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CalendarPage(
-              userEmail: email,
-              userName: profile.name,
-              userRole: profile.role,
-            ),
-          ),
-        );
+      try {
+        if (businessName.isNotEmpty) {
+          await _createBusinessIfNeeded(businessName);
+        } else {
+          await _redeemInviteIfNeeded(inviteCode);
+        }
+      } catch (e) {
+        if (signupJustSucceeded) {
+          final profile = await ProfileService.loadCurrentProfile();
+          if (profile != null && mounted) {
+            _showBanner(
+              businessName.isNotEmpty
+                  ? 'Account created. If your business did not appear, sign in and try again.'
+                  : 'Account created and signed in. If shifts look wrong, ask your manager for a new invite code.',
+              UniversalTheme.darkSlate,
+            );
+            await _navigateToCalendar();
+            return;
+          }
+        }
+        rethrow;
       }
+
+      await _navigateToCalendar();
     } catch (e) {
-      _showBanner('Authentication Error: $e', UniversalTheme.alertRed);
+      if (treatAsSignIn && _isSignUp && mounted) {
+        setState(() => _isSignUp = false);
+      }
+      _showBanner(_authErrorMessage(e), UniversalTheme.alertRed);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _handlePasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showBanner('Enter your email address first.', UniversalTheme.alertRed);
+      return;
+    }
+
+    try {
+      await _supabase.auth.resetPasswordForEmail(email);
+      _showBanner('Password reset email sent.', Colors.green);
+    } catch (_) {
+      _showBanner('Could not send reset email. Try again later.', UniversalTheme.alertRed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_needsOwnerSetup) {
+      return SetupPage(
+        onOwnerCreated: () {
+          setState(() => _needsOwnerSetup = false);
+        },
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F6F0),
       body: Center(
@@ -135,76 +296,55 @@ class _AuthPageState extends State<AuthPage> {
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const Divider(height: 32, thickness: 1.2),
-                  
                   if (_isSignUp) ...[
                     TextField(
                       controller: _nameController,
-                      style: const TextStyle(color: Color(0xFF2D2D2D), fontSize: 15, fontWeight: FontWeight.w500),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Your Name',
-                        labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-                        hintText: 'Enter your first name...',
-                        hintStyle: const TextStyle(color: Colors.black38),
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey.shade400, width: 1.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _businessNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Business Name (for owner signup)',
+                        hintText: 'Create a new business — leave blank if using invite code',
+                        border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
-
+                  if (!_needsOwnerSetup)
+                    TextField(
+                      controller: _inviteCodeController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: InputDecoration(
+                        labelText: 'Organization Invite Code',
+                        hintText: _isSignUp
+                            ? 'Required to join an existing team'
+                            : 'Optional — use to join your team',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  if (!_needsOwnerSetup) const SizedBox(height: 16),
                   TextField(
                     controller: _emailController,
-                    style: const TextStyle(color: Color(0xFF2D2D2D), fontSize: 15, fontWeight: FontWeight.w500),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Email Address',
-                      labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-                      hintText: 'username@example.com',
-                      hintStyle: const TextStyle(color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey.shade400, width: 1.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
-                    style: const TextStyle(color: Color(0xFF2D2D2D), fontSize: 15, fontWeight: FontWeight.w500),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Password',
-                      labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-                      hintText: 'Enter your password...',
-                      hintStyle: const TextStyle(color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey.shade400, width: 1.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   ElevatedButton(
                     onPressed: _isLoading ? null : _handleSubmit,
                     style: ElevatedButton.styleFrom(
@@ -213,11 +353,29 @@ class _AuthPageState extends State<AuthPage> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     child: _isLoading
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Sign In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            _isSignUp ? 'Create Account' : 'Sign In',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
-                  const SizedBox(height: 16),
-
+                  const SizedBox(height: 8),
+                  if (!_isSignUp)
+                    TextButton(
+                      onPressed: _handlePasswordReset,
+                      child: const Text(
+                        'Forgot password?',
+                        style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   TextButton(
                     onPressed: () => setState(() => _isSignUp = !_isSignUp),
                     child: Text(

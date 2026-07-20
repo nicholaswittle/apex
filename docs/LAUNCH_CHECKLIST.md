@@ -2,13 +2,14 @@
 
 Bundle ID: **`com.wisense.apex`**
 
-## Before first Mac build
+> **No Mac?** See **[docs/LAUNCH_WITHOUT_MAC.md](LAUNCH_WITHOUT_MAC.md)** — ship Android first, build iOS in GitHub Actions or Codemagic.
 
-- [ ] Apple Developer Program enrolled ($99/yr)
-- [ ] Google Play Console account ($25 one-time)
-- [ ] Flutter stable installed on M1 Mac (`flutter doctor -v`)
-- [ ] Xcode installed, license accepted
-- [ ] CocoaPods: `sudo gem install cocoapods`
+## Before first build
+
+- [ ] Apple Developer Program enrolled ($99/yr) — needed for iOS only
+- [ ] Google Play Console account ($25 one-time) — **no Mac required**
+- [ ] Flutter installed on your PC (Windows/Linux) or use GitHub Actions
+- [ ] Mac + Xcode — **optional** if using cloud CI for iOS (see `LAUNCH_WITHOUT_MAC.md`)
 
 ## Firebase (push notifications)
 
@@ -28,7 +29,7 @@ dart pub global activate flutterfire_cli
 flutterfire configure --project=YOUR_PROJECT_ID
 ```
 
-## Supabase + Stripe (runtime)
+## Supabase (runtime)
 
 Pass at build/run time (see `scripts/run_dev.sh`):
 
@@ -36,7 +37,10 @@ Pass at build/run time (see `scripts/run_dev.sh`):
 |----------|---------|
 | `SUPABASE_URL` | Auth + data |
 | `SUPABASE_ANON_KEY` | Public anon key |
-| `STRIPE_PUBLISHABLE_KEY` | Owner billing Payment Sheet |
+
+## Billing (deferred)
+
+Stripe owner subscriptions are **not required** for the Jigsy's pilot. Set `AppConfig.billingEnabled = true` and configure Stripe when ready to monetize. Edge functions (`create-payment-intent`, `stripe-webhook`) remain in the repo for later.
 
 ## iOS — TestFlight
 
@@ -79,13 +83,28 @@ keytool -genkey -v -keystore android/upload-keystore.jks \
 **Name:** Apex Scheduler  
 **Subtitle:** Staff scheduling for Jigsy's Brewpub  
 **Category:** Business / Productivity  
-**Description:** Shift calendar, availability, swap requests, time clock, and owner billing for small hospitality teams.
+**Description:** Shift calendar, availability, swap requests, time clock, and sidework for small hospitality teams.
+
+## Supabase Edge Function secrets
+
+Required for push notifications:
+
+| Secret | Used by |
+|--------|---------|
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | `send-push-notification` |
+
+Optional (billing deferred):
+
+| Secret | Used by |
+|--------|---------|
+| `STRIPE_SECRET_KEY` | `create-payment-intent` |
+| `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` |
 
 ## Privacy
 
 - Collects: email, name, work schedule data, optional push token
-- Third parties: Supabase (auth/database), Firebase (push), Stripe (owner subscription only)
-- Host a privacy policy URL before submission
+- Third parties: Supabase (auth/database), Firebase (push)
+- Host privacy policy before submission: see **[docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)**
 
 ## Verify locally
 

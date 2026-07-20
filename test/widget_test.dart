@@ -1,15 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:apex/theme.dart';
 
 void main() {
-  testWidgets('Smoke test: Apex Scheduler widget tree renders', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: Center(child: Text("Apex Scheduler")),
-        ),
-      ),
-    );
-    expect(find.text("Apex Scheduler"), findsOneWidget);
+  test('UniversalTheme brand colors are defined', () {
+    expect(UniversalTheme.accent.toARGB32(), 0xFFD97706);
+    expect(UniversalTheme.darkSlate.toARGB32(), 0xFF3E1F13);
+    expect(UniversalTheme.alertRed.toARGB32(), 0xFF991B1B);
   });
 }
