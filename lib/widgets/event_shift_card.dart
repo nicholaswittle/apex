@@ -1,5 +1,6 @@
 import 'package:apex/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:wisense_ui/wisense_ui.dart';
 
 class EventShiftCard extends StatelessWidget {
   const EventShiftCard({
@@ -57,7 +58,7 @@ class EventShiftCard extends StatelessWidget {
                       color: UniversalTheme.darkSlate,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: WiSenseSpacing.xs),
                   Text(
                     'Time: $time',
                     style: const TextStyle(

@@ -1,3 +1,4 @@
+import 'package:apex/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:wisense_ui/wisense_ui.dart';
 
@@ -135,39 +136,39 @@ typedef _StatusStyle = ({
 
 _StatusStyle _styleFor(_StaffStatus status) => switch (status) {
       _StaffStatus.onVacation => (
-          background: const Color(0xFFFEF3C7),
-          border: const Color(0xFFD97706),
-          icon: const Color(0xFFD97706),
-          text: const Color(0xFF92400E),
+          background: AvailabilityPalette.vacationBg,
+          border: AvailabilityPalette.vacationAccent,
+          icon: AvailabilityPalette.vacationAccent,
+          text: AvailabilityPalette.vacationText,
           glyph: Icons.beach_access,
           chipIconSize: 11,
           rowIconSize: 14,
           selfLabel: 'On approved vacation',
         ),
       _StaffStatus.booked => (
-          background: const Color(0xFFDBEAFE),
-          border: const Color(0xFF2563EB),
-          icon: const Color(0xFF2563EB),
-          text: const Color(0xFF1E3A8A),
+          background: AvailabilityPalette.bookedBg,
+          border: AvailabilityPalette.bookedAccent,
+          icon: AvailabilityPalette.bookedAccent,
+          text: AvailabilityPalette.bookedText,
           glyph: Icons.work_history,
           chipIconSize: 11,
           rowIconSize: 14,
           selfLabel: 'Booked — you have a shift',
         ),
       _StaffStatus.available => (
-          background: const Color(0xFFD1FAE5),
-          border: const Color(0xFF059669),
-          icon: const Color(0xFF059669),
-          text: const Color(0xFF065F46),
+          background: AvailabilityPalette.availableBg,
+          border: AvailabilityPalette.availableAccent,
+          icon: AvailabilityPalette.availableAccent,
+          text: AvailabilityPalette.availableText,
           glyph: Icons.circle,
           chipIconSize: 7,
           rowIconSize: 8,
           selfLabel: 'Available',
         ),
       _StaffStatus.unavailable => (
-          background: const Color(0xFFF3F4F6),
-          border: const Color(0xFFD1D5DB),
-          icon: const Color(0xFF9CA3AF),
+          background: AvailabilityPalette.idleBg,
+          border: AvailabilityPalette.idleBorder,
+          icon: AvailabilityPalette.idleAccent,
           text: Colors.grey,
           glyph: Icons.circle,
           chipIconSize: 7,

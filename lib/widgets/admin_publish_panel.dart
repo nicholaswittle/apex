@@ -215,11 +215,11 @@ class AdminPublishPanel extends StatelessWidget {
                                                 child: Text(val, overflow: TextOverflow.ellipsis),
                                               ),
                                               if (bookedOnTargetDays.contains(val)) ...[
-                                                const SizedBox(width: 6),
+                                                const SizedBox(width: WiSenseSpacing.xs),
                                                 const Icon(
                                                   Icons.warning_amber_rounded,
                                                   size: 15,
-                                                  color: Color(0xFFD97706),
+                                                  color: UniversalTheme.accent,
                                                 ),
                                               ],
                                             ],
@@ -232,23 +232,23 @@ class AdminPublishPanel extends StatelessWidget {
                           ),
                           if (selectedStaff != null &&
                               bookedOnTargetDays.contains(selectedStaff)) ...[
-                            const SizedBox(height: 6),
+                            const SizedBox(height: WiSenseSpacing.sm),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Icon(
                                   Icons.warning_amber_rounded,
                                   size: 15,
-                                  color: Color(0xFFD97706),
+                                  color: UniversalTheme.accent,
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: WiSenseSpacing.xs),
                                 Expanded(
                                   child: Text(
                                     '$selectedStaff is already on a shift on a selected day.',
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF92400E),
+                                      color: UniversalTheme.warningText,
                                     ),
                                   ),
                                 ),
