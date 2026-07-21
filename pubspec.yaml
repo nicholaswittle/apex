@@ -15,7 +15,6 @@ dependencies:
   supabase_flutter: ^2.0.0
   shared_preferences: ^2.5.3
   share_plus: ^11.0.0
-  sentry_flutter: ^8.14.0
   wisense_ui:
     path: packages/wisense_ui
 

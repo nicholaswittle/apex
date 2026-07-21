@@ -64,7 +64,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.wisense.apex</string>
+				<string>com.nicholaswittle.apex</string>
 			</array>
 		</dict>
 	</array>

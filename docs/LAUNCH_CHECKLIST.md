@@ -1,6 +1,6 @@
 # Apex Scheduler — App Store / Play Store launch checklist
 
-Bundle ID: **`com.wisense.apex`**
+Bundle ID: **`com.nicholaswittle.apex`** (iOS) · **`com.wisense.apex`** (Android `applicationId`)
 
 > **No Mac?** See **[docs/LAUNCH_WITHOUT_MAC.md](LAUNCH_WITHOUT_MAC.md)** — ship Android first, build iOS in GitHub Actions or Codemagic.
 
@@ -14,7 +14,7 @@ Bundle ID: **`com.wisense.apex`**
 ## Firebase (push notifications)
 
 1. Create Firebase project (or reuse WiSense project)
-2. Add **iOS app** with bundle ID `com.wisense.apex`
+2. Add **iOS app** with bundle ID `com.nicholaswittle.apex`
 3. Add **Android app** with package `com.wisense.apex`
 4. Download configs:
    - `ios/Runner/GoogleService-Info.plist`
@@ -47,7 +47,7 @@ Stripe owner subscriptions are **not required** for the Jigsy's pilot. Set `AppC
 1. Open `ios/Runner.xcworkspace` in Xcode
 2. Select **Runner** target → **Signing & Capabilities**
    - Team: your Apple Developer team
-   - Bundle ID: `com.wisense.apex`
+   - Bundle ID: `com.nicholaswittle.apex`
    - Enable **Push Notifications**
 3. For release archive: set `Runner.entitlements` `aps-environment` to **production**
 4. Build from CLI:
