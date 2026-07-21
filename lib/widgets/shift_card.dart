@@ -65,7 +65,7 @@ class ShiftCard extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: UniversalTheme.darkSlate,
                         ),
@@ -97,18 +97,22 @@ class ShiftCard extends StatelessWidget {
                             isUnassigned
                                 ? Icons.supervised_user_circle_outlined
                                 : Icons.account_circle,
-                            size: 14,
-                            color: isUnassigned ? UniversalTheme.accent : Colors.black54,
+                            size: 18,
+                            color: isUnassigned ? UniversalTheme.accent : UniversalTheme.darkSlate,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            isUnassigned
-                                ? 'OPEN SLOT (UNASSIGNED)'
-                                : 'Assigned to: $scheduled',
-                            style: TextStyle(
-                              color: isUnassigned ? UniversalTheme.accent : Colors.black54,
-                              fontSize: 12,
-                              fontWeight: isUnassigned ? FontWeight.bold : FontWeight.normal,
+                          Expanded(
+                            child: Text(
+                              isUnassigned
+                                  ? 'OPEN SLOT (UNASSIGNED)'
+                                  : 'Assigned to: $scheduled',
+                              style: TextStyle(
+                                color: isUnassigned
+                                    ? UniversalTheme.accent
+                                    : UniversalTheme.darkSlate,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -119,8 +123,8 @@ class ShiftCard extends StatelessWidget {
                           notes!,
                           style: const TextStyle(
                             color: Colors.brown,
-                            fontStyle: FontStyle.italic,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
                       ],

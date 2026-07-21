@@ -62,6 +62,7 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Map<String, dynamic>> _availabilityForDay = [];
   bool _myAvailabilityToday = true;
   bool _isOnVacation = false;
+  bool _isBookedToday = false;
   bool _isLoadingAvailability = false;
   Map<String, String> _clockedInEntries = {};
   String? _adminSelectedStaff;
@@ -71,6 +72,7 @@ class _CalendarPageState extends State<CalendarPage> {
   String _adminEndTime = '5:30 PM';
   late DateTime _adminTargetWeekAnchor;
   final Map<String, bool> _adminSelectedDays = {};
+  Set<String> _bookedOnTargetDays = {};
   final Map<String, String> _dayLabels = {};
 
   final _supabase = Supabase.instance.client;
@@ -223,6 +225,7 @@ class _CalendarPageState extends State<CalendarPage> {
       _availabilityForDay = result.availabilityForDay;
       _myAvailabilityToday = result.myAvailabilityToday;
       _isOnVacation = result.isOnVacation;
+      _isBookedToday = result.isBooked;
       _isLoadingAvailability = false;
     });
   }
@@ -240,6 +243,10 @@ class _CalendarPageState extends State<CalendarPage> {
         return;
       }
       if (data.isNotEmpty && !_isOwner && mounted) setState(() => _showAckBanner = true);
+      if (!mounted) return;
+      // A shift added/removed/reassigned changes who counts as booked.
+      _loadAvailabilityForDate(_selectedDate);
+      if (_isOwner) _refreshBookedOnTargetDays();
     });
   }
 
@@ -252,7 +259,16 @@ class _CalendarPageState extends State<CalendarPage> {
         dayLabels: _dayLabels,
       );
     });
-    if (_isOwner) _refreshSmartSuggestions();
+    if (_isOwner) {
+      _refreshSmartSuggestions();
+      _refreshBookedOnTargetDays();
+    }
+  }
+
+  Future<void> _refreshBookedOnTargetDays() async {
+    final keys = _adminSelectedDays.entries.where((e) => e.value).map((e) => e.key).toList();
+    final booked = await _ctrl.loadBookedStaffForDates(keys);
+    if (mounted) setState(() => _bookedOnTargetDays = booked);
   }
 
   Future<void> _refreshSmartSuggestions() async {
@@ -336,6 +352,7 @@ class _CalendarPageState extends State<CalendarPage> {
           availabilityForDay: _availabilityForDay,
           myAvailabilityToday: _myAvailabilityToday,
           isOnVacation: _isOnVacation,
+          isBookedToday: _isBookedToday,
           allRequests: _allRequests,
           clockedInEntries: _clockedInEntries,
           staffNames: _staffNames,
@@ -433,6 +450,7 @@ class _CalendarPageState extends State<CalendarPage> {
           isEvent: _adminIsEvent,
           adminTargetWeekAnchor: _adminTargetWeekAnchor,
           adminSelectedDays: _adminSelectedDays,
+          bookedOnTargetDays: _bookedOnTargetDays,
           dayLabels: _dayLabels,
           onStaffChanged: (val) => setState(() => _adminSelectedStaff = val),
           onZoneChanged: (val) => setState(() => _adminSelectedZone = val),
@@ -441,7 +459,10 @@ class _CalendarPageState extends State<CalendarPage> {
           onEventChanged: (val) => setState(() => _adminIsEvent = val),
           onDayToggled: (key, val) {
             setState(() => _adminSelectedDays[key] = val);
-            if (_isOwner) _refreshSmartSuggestions();
+            if (_isOwner) {
+              _refreshSmartSuggestions();
+              _refreshBookedOnTargetDays();
+            }
           },
           onWeekChanged: _changeAdminWeek,
           onCopyLastWeek: _isOwner
@@ -467,10 +488,13 @@ class _CalendarPageState extends State<CalendarPage> {
             adminIsEvent: _adminIsEvent,
             adminSelectedZone: _adminSelectedZone,
             setPublishing: (v) => setState(() => _isPublishing = v),
-            onSuccess: () => setState(() {
-              _adminSelectedDays.updateAll((key, value) => false);
-              _adminSelectedZone = null;
-            }),
+            onSuccess: () {
+              setState(() {
+                _adminSelectedDays.updateAll((key, value) => false);
+                _adminSelectedZone = null;
+              });
+              _refreshBookedOnTargetDays();
+            },
           ),
         ),
       ];

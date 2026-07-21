@@ -10,6 +10,7 @@ class AvailabilityService {
     List<Map<String, dynamic>> availabilityForDay,
     bool myAvailabilityToday,
     bool isOnVacation,
+    bool isBooked,
   })> loadForDate({
     required DateTime date,
     required List<String> staffNames,
@@ -24,10 +25,12 @@ class AvailabilityService {
           .eq('status', 'Approved')
           .lte('start_date', dateStr)
           .gte('end_date', dateStr),
+      _client.from('shifts').select('staff').eq('shift_date', dateStr),
     ]);
 
     final rows = ((results[0] as List?)?.cast<Map<String, dynamic>>()) ?? [];
     final vacationRows = ((results[1] as List?)?.cast<Map<String, dynamic>>()) ?? [];
+    final shiftRows = ((results[2] as List?)?.cast<Map<String, dynamic>>()) ?? [];
 
     final avMap = <String, bool>{
       for (final row in rows)
@@ -40,11 +43,17 @@ class AvailabilityService {
         if (row['user_name'] is String) row['user_name'] as String,
     };
 
+    final bookedSet = <String>{
+      for (final row in shiftRows)
+        if (row['staff'] is String && row['staff'] != 'Open') row['staff'] as String,
+    };
+
     final availabilityForDay = staffNames
         .map((name) => {
               'user_name': name,
               'available': vacationSet.contains(name) ? false : (avMap[name] ?? true),
               'on_vacation': vacationSet.contains(name),
+              'booked': bookedSet.contains(name),
             })
         .toList();
 
@@ -53,7 +62,22 @@ class AvailabilityService {
       myAvailabilityToday:
           vacationSet.contains(userName) ? false : (avMap[userName] ?? true),
       isOnVacation: vacationSet.contains(userName),
+      isBooked: bookedSet.contains(userName),
     );
+  }
+
+  /// Staff already assigned to a shift on any of [dateKeys].
+  ///
+  /// Used to warn the admin before double-booking someone on the target days
+  /// they are publishing to — which are not necessarily the calendar's
+  /// selected date.
+  Future<Set<String>> loadBookedStaff({required List<String> dateKeys}) async {
+    if (dateKeys.isEmpty) return {};
+    final rows = await _client.from('shifts').select('staff').inFilter('shift_date', dateKeys);
+    return {
+      for (final row in rows)
+        if (row['staff'] is String && row['staff'] != 'Open') row['staff'] as String,
+    };
   }
 
   Future<void> toggleAvailability({

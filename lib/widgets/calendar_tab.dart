@@ -21,6 +21,7 @@ class CalendarTab extends StatelessWidget {
     required this.availabilityForDay,
     required this.myAvailabilityToday,
     required this.isOnVacation,
+    required this.isBookedToday,
     required this.allRequests,
     required this.clockedInEntries,
     required this.staffNames,
@@ -54,6 +55,7 @@ class CalendarTab extends StatelessWidget {
   final List<Map<String, dynamic>> availabilityForDay;
   final bool myAvailabilityToday;
   final bool isOnVacation;
+  final bool isBookedToday;
   final List<dynamic> allRequests;
   final Map<String, String> clockedInEntries;
   final List<String> staffNames;
@@ -131,6 +133,7 @@ class CalendarTab extends StatelessWidget {
                   userName: userName,
                   myAvailabilityToday: myAvailabilityToday,
                   isOnVacation: isOnVacation,
+                  isBookedToday: isBookedToday,
                   onToggleAvailability: onToggleAvailability,
                 ),
                 SideworkSection(

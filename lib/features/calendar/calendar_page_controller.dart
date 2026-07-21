@@ -108,6 +108,7 @@ class CalendarPageController {
     List<Map<String, dynamic>> availabilityForDay,
     bool myAvailabilityToday,
     bool isOnVacation,
+    bool isBooked,
   })?> loadAvailabilityForDate({
     required DateTime date,
     required List<String> staffNames,
@@ -122,6 +123,16 @@ class CalendarPageController {
     } catch (e) {
       showBanner('Failed to load availability: $e', UniversalTheme.alertRed);
       return null;
+    }
+  }
+
+  Future<Set<String>> loadBookedStaffForDates(List<String> dateKeys) async {
+    try {
+      return await availabilityService.loadBookedStaff(dateKeys: dateKeys);
+    } catch (_) {
+      // Advisory only — a failed lookup drops the warning rather than
+      // banner-spamming the admin on every day toggle.
+      return {};
     }
   }
 

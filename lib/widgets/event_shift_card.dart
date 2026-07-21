@@ -52,14 +52,19 @@ class EventShiftCard extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: UniversalTheme.darkSlate,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     'Time: $time',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    style: const TextStyle(
+                      color: UniversalTheme.darkSlate,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
                   ),
                 ],
               ),

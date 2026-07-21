@@ -8,6 +8,7 @@ class StaffAvailabilityCard extends StatelessWidget {
   final String userName;
   final bool myAvailabilityToday;
   final bool isOnVacation;
+  final bool isBookedToday;
   final VoidCallback onToggleAvailability;
 
   const StaffAvailabilityCard({
@@ -18,6 +19,7 @@ class StaffAvailabilityCard extends StatelessWidget {
     required this.userName,
     required this.myAvailabilityToday,
     required this.isOnVacation,
+    required this.isBookedToday,
     required this.onToggleAvailability,
   });
 
@@ -38,39 +40,30 @@ class StaffAvailabilityCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 6,
             children: availabilityForDay.map((staff) {
-              final isAvail = staff['available'] as bool;
-              final onVacation = staff['on_vacation'] as bool? ?? false;
-              final chipColor = onVacation
-                  ? const Color(0xFFFEF3C7)
-                  : (isAvail ? const Color(0xFFD1FAE5) : const Color(0xFFF3F4F6));
-              final borderColor = onVacation
-                  ? const Color(0xFFD97706)
-                  : (isAvail ? const Color(0xFF059669) : Colors.grey.shade300);
-              final iconColor = onVacation
-                  ? const Color(0xFFD97706)
-                  : (isAvail ? const Color(0xFF059669) : Colors.grey.shade400);
-              final textColor = onVacation
-                  ? const Color(0xFF92400E)
-                  : (isAvail ? const Color(0xFF065F46) : Colors.grey);
+              final style = _styleFor(_resolveStatus(
+                onVacation: staff['on_vacation'] as bool? ?? false,
+                booked: staff['booked'] as bool? ?? false,
+                available: staff['available'] as bool,
+              ));
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: chipColor,
+                  color: style.background,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(color: style.border),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      onVacation ? Icons.beach_access : Icons.circle,
-                      size: onVacation ? 11 : 7,
-                      color: iconColor,
-                    ),
+                    Icon(style.glyph, size: style.chipIconSize, color: style.icon),
                     const SizedBox(width: 5),
                     Text(
                       staff['user_name'] as String,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: style.text,
+                      ),
                     ),
                   ],
                 ),
@@ -78,26 +71,22 @@ class StaffAvailabilityCard extends StatelessWidget {
             }).toList(),
           )
         else
-          Row(
+          Builder(builder: (context) {
+            final style = _styleFor(_resolveStatus(
+              onVacation: isOnVacation,
+              booked: isBookedToday,
+              available: myAvailabilityToday,
+            ));
+            return Row(
             children: [
-              Icon(
-                isOnVacation ? Icons.beach_access : Icons.circle,
-                size: isOnVacation ? 14 : 8,
-                color: isOnVacation
-                    ? const Color(0xFFD97706)
-                    : (myAvailabilityToday ? const Color(0xFF059669) : Colors.grey.shade400),
-              ),
+              Icon(style.glyph, size: style.rowIconSize, color: style.icon),
               const SizedBox(width: 6),
               Text(
-                isOnVacation
-                    ? 'On approved vacation'
-                    : (myAvailabilityToday ? 'Available' : 'Marked unavailable'),
+                style.selfLabel,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isOnVacation
-                      ? const Color(0xFF92400E)
-                      : (myAvailabilityToday ? const Color(0xFF065F46) : Colors.grey),
+                  color: style.text,
                 ),
               ),
               const Spacer(),
@@ -109,7 +98,8 @@ class StaffAvailabilityCard extends StatelessWidget {
                   onChanged: (_) => onToggleAvailability(),
                 ),
             ],
-          ),
+          );
+          }),
         const SizedBox(height: 12),
         const Divider(height: 1),
         const SizedBox(height: 8),
@@ -117,3 +107,71 @@ class StaffAvailabilityCard extends StatelessWidget {
     );
   }
 }
+
+enum _StaffStatus { onVacation, booked, available, unavailable }
+
+/// Vacation outranks booked, which outranks the self-declared availability flag:
+/// an approved leave is authoritative, and an existing assignment is a fact.
+_StaffStatus _resolveStatus({
+  required bool onVacation,
+  required bool booked,
+  required bool available,
+}) {
+  if (onVacation) return _StaffStatus.onVacation;
+  if (booked) return _StaffStatus.booked;
+  return available ? _StaffStatus.available : _StaffStatus.unavailable;
+}
+
+typedef _StatusStyle = ({
+  Color background,
+  Color border,
+  Color icon,
+  Color text,
+  IconData glyph,
+  double chipIconSize,
+  double rowIconSize,
+  String selfLabel,
+});
+
+_StatusStyle _styleFor(_StaffStatus status) => switch (status) {
+      _StaffStatus.onVacation => (
+          background: const Color(0xFFFEF3C7),
+          border: const Color(0xFFD97706),
+          icon: const Color(0xFFD97706),
+          text: const Color(0xFF92400E),
+          glyph: Icons.beach_access,
+          chipIconSize: 11,
+          rowIconSize: 14,
+          selfLabel: 'On approved vacation',
+        ),
+      _StaffStatus.booked => (
+          background: const Color(0xFFDBEAFE),
+          border: const Color(0xFF2563EB),
+          icon: const Color(0xFF2563EB),
+          text: const Color(0xFF1E3A8A),
+          glyph: Icons.work_history,
+          chipIconSize: 11,
+          rowIconSize: 14,
+          selfLabel: 'Booked — you have a shift',
+        ),
+      _StaffStatus.available => (
+          background: const Color(0xFFD1FAE5),
+          border: const Color(0xFF059669),
+          icon: const Color(0xFF059669),
+          text: const Color(0xFF065F46),
+          glyph: Icons.circle,
+          chipIconSize: 7,
+          rowIconSize: 8,
+          selfLabel: 'Available',
+        ),
+      _StaffStatus.unavailable => (
+          background: const Color(0xFFF3F4F6),
+          border: const Color(0xFFD1D5DB),
+          icon: const Color(0xFF9CA3AF),
+          text: Colors.grey,
+          glyph: Icons.circle,
+          chipIconSize: 7,
+          rowIconSize: 8,
+          selfLabel: 'Marked unavailable',
+        ),
+    };

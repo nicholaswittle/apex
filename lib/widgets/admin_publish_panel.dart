@@ -25,6 +25,7 @@ class AdminPublishPanel extends StatelessWidget {
     required this.isEvent,
     required this.adminTargetWeekAnchor,
     required this.adminSelectedDays,
+    required this.bookedOnTargetDays,
     required this.dayLabels,
     required this.onStaffChanged,
     required this.onZoneChanged,
@@ -54,6 +55,10 @@ class AdminPublishPanel extends StatelessWidget {
   final bool isEvent;
   final DateTime adminTargetWeekAnchor;
   final Map<String, bool> adminSelectedDays;
+
+  /// Staff already assigned to a shift on one of the checked target days.
+  /// Advisory only — split shifts are legitimate, so these stay selectable.
+  final Set<String> bookedOnTargetDays;
   final Map<String, String> dayLabels;
   final ValueChanged<String?> onStaffChanged;
   final ValueChanged<String?> onZoneChanged;
@@ -204,13 +209,52 @@ class AdminPublishPanel extends StatelessWidget {
                                     : <String>['Open', ...staffNames].map((val) {
                                         return DropdownMenuItem<String>(
                                           value: val,
-                                          child: Text(val),
+                                          child: Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(val, overflow: TextOverflow.ellipsis),
+                                              ),
+                                              if (bookedOnTargetDays.contains(val)) ...[
+                                                const SizedBox(width: 6),
+                                                const Icon(
+                                                  Icons.warning_amber_rounded,
+                                                  size: 15,
+                                                  color: Color(0xFFD97706),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         );
                                       }).toList(),
                                 onChanged: isLoadingStaff ? null : onStaffChanged,
                               ),
                             ),
                           ),
+                          if (selectedStaff != null &&
+                              bookedOnTargetDays.contains(selectedStaff)) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 15,
+                                  color: Color(0xFFD97706),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    '$selectedStaff is already on a shift on a selected day.',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 8),
                           LaborCostPanel(
                             selectedStaff: selectedStaff,
