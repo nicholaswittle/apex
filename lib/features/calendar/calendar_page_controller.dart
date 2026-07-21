@@ -777,9 +777,16 @@ class CalendarPageController {
     }
   }
 
-  Future<List<ShiftSuggestion>> loadSmartSuggestions(DateTime targetDate) async {
+  Future<List<ShiftSuggestion>> loadSmartSuggestions(
+    DateTime targetDate, {
+    List<String> staffNames = const [],
+  }) async {
     final orgId = await ProfileService.loadOrganizationId();
     if (orgId == null) return [];
-    return suggestionEngine.suggestForDate(orgId: orgId, targetDate: targetDate);
+    return suggestionEngine.suggestForDate(
+      orgId: orgId,
+      targetDate: targetDate,
+      staffNames: staffNames,
+    );
   }
 }

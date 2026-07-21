@@ -25,3 +25,20 @@ double calculateShiftHours(String startTime, String endTime) {
   if (end < start) end += 24;
   return end - start;
 }
+
+/// Splits a stored `notes` value (`'Shift: 9:00 AM - 5:00 PM'`) into its
+/// start and end times. Returns null when the string isn't a shift range —
+/// `notes` is free text and older rows may hold anything.
+({String start, String end})? parseShiftRange(String? notes) {
+  if (notes == null) return null;
+  final parts = notes.replaceFirst('Shift: ', '').split(' - ');
+  if (parts.length != 2) return null;
+  return (start: parts[0].trim(), end: parts[1].trim());
+}
+
+/// Paid hours for a stored shift row, or 0.0 when [notes] isn't a range.
+double hoursFromNotes(String? notes) {
+  final range = parseShiftRange(notes);
+  if (range == null) return 0.0;
+  return calculateShiftHours(range.start, range.end);
+}

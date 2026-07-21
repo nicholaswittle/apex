@@ -1,5 +1,6 @@
 import 'package:apex/core/analytics_service.dart';
 import 'package:apex/core/date_utils.dart';
+import 'package:apex/core/shift_hours_util.dart';
 import 'package:apex/features/availability/availability_service.dart';
 import 'package:apex/features/calendar/calendar_page_controller.dart';
 import 'package:apex/features/schedule/conflict_detector.dart';
@@ -276,7 +277,7 @@ class _CalendarPageState extends State<CalendarPage> {
     final selectedKeys = _adminSelectedDays.entries.where((e) => e.value).map((e) => e.key);
     final firstSelected = selectedKeys.isEmpty ? null : selectedKeys.first;
     final target = firstSelected != null ? parseDateKey(firstSelected) : _adminTargetWeekAnchor;
-    final list = await _ctrl.loadSmartSuggestions(target);
+    final list = await _ctrl.loadSmartSuggestions(target, staffNames: _staffNames);
     if (mounted) {
       setState(() {
         _suggestions = list;
@@ -285,16 +286,18 @@ class _CalendarPageState extends State<CalendarPage> {
     }
   }
 
-  void _applySuggestion(ShiftSuggestion s) {
+  void _applySuggestion(ShiftSuggestion s, {String? staffName}) {
     setState(() {
       _adminShiftTitleController.text = s.title;
       _adminSelectedZone = s.zone;
-      if (s.notes != null && s.notes!.contains('Shift:')) {
-        final parts = s.notes!.replaceFirst('Shift: ', '').split(' - ');
-        if (parts.length == 2) {
-          _adminStartTime = parts[0].trim();
-          _adminEndTime = parts[1].trim();
-        }
+      final range = parseShiftRange(s.notes);
+      if (range != null) {
+        _adminStartTime = range.start;
+        _adminEndTime = range.end;
+      }
+      final assignee = staffName ?? s.candidates.firstOrNull?.name;
+      if (assignee != null && _staffNames.contains(assignee)) {
+        _adminSelectedStaff = assignee;
       }
     });
     AnalyticsService.instance.logEvent('smart_suggestion_applied', params: {'title': s.title});
